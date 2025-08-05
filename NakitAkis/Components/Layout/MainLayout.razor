@@ -1,0 +1,143 @@
+﻿@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <!-- Navigation -->
+        <nav class="navbar navbar-expand-lg navbar-dark navbar-modern fixed-top">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="/">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Nakit Akış Dashboard
+                </a>
+
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/dashboard">
+                                <i class="fas fa-dashboard me-1"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/swagger" target="_blank">
+                                <i class="fas fa-code me-1"></i>API Docs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/hangfire" target="_blank">
+                                <i class="fas fa-cog me-1"></i>Jobs
+                            </a>
+                        </li>
+                    </ul>
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="/health" target="_blank">
+                                <i class="fas fa-heart me-1"></i>Health
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <main>
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="container-fluid" style="padding-top: 80px;">
+                @Body
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <span>&copy; 2025 Nakit Akış Dashboard. Tüm hakları saklıdır.</span>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Error UI -->
+    <div id="blazor-error-ui">
+        <environment include="Staging,Production">
+            Bir hata oluştu. Bu uygulama artık yanıt vermiyor olabilir.
+        </environment>
+        <environment include="Development">
+            Unhandled exception: <span class="text-danger">#ERROR</span>
+        </environment>
+        <a href="" class="reload">Yenile</a>
+        <a class="dismiss">🗙</a>
+    </div>
+</div>
+
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f8f9fa;
+    }
+
+    .navbar-modern {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .main-content {
+        min-height: 100vh;
+        padding-top: 2rem;
+    }
+
+    .footer {
+        background: #343a40;
+        color: white;
+        text-align: center;
+        padding: 1rem;
+        margin-top: 3rem;
+    }
+
+    .page {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+
+    .sidebar {
+        top: 0;
+    }
+
+    main {
+        flex: 1;
+    }
+
+    #blazor-error-ui {
+        background: lightyellow;
+        bottom: 0;
+        box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+        display: none;
+        left: 0;
+        padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+        position: fixed;
+        width: 100%;
+        z-index: 1000;
+    }
+
+        #blazor-error-ui .dismiss {
+            cursor: pointer;
+            position: absolute;
+            right: 0.75rem;
+            top: 0.5rem;
+        }
+
+    .blazor-error-boundary {
+        background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPjxkZWZzPjxyZWN0IGlkPSJhIiB3aWR0aD0iNTYiIGhlaWdodD0iNDkiLz48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj48bWFzayBpZD0iYiIgZmlsbD0iI2ZmZiI+PHVzZSB4bGluazpocmVmPSIjYSIvPjwvbWFzaz48cGF0aCBmaWxsPSIjRkY1NTU2IiBkPSJNMjkgNC4wM2MxLjE2OSAwIDIuMDEuODkgMi4wMSAyLjAzIDAgLjQyLS4xNDcuODM1LS40MzYgMS4xNGwtMTMuNDQzIDEwLjY5NWExLjA5NCAxLjA5NCAwIDAxLTEuMzQxLS4wM2wtMTEuODc0LTkuNDk0YTEuOTc1IDEuOTc1IDAgMDEtLjQzNi0xLjEzOUMzLjQ4IDQuOTIzIDQuMzIgNC4wMyA1LjQ5IDQuMDNoMjMuNTF6bTEuMzM2IDM2LjQ2OWEyLjAyIDIuMDIgMCAwMS0yLjAyIDIuMDJjLTEuMTIgMC0yLjAyLS45MDMtMi4wMi0yLjAyVjI0Ljc4N2MwLTEuMTE4LjkwMS0yLjAyIDIuMDItMi4wMnMyLjAyLjkwMiAyLjAyIDIuMDJ2MTUuNzEyeiIgbWFzaz0idXJsKCNiKSIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+        padding: 1rem 1rem 1rem 3.7rem;
+        color: white;
+    }
+
+        .blazor-error-boundary::after {
+            content: "Bir hata oluştu."
+        }
+</style>

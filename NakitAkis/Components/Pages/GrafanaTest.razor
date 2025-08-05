@@ -1,0 +1,221 @@
+﻿@page "/grafana-test"
+@using System.Text.Json
+@using System.Text
+@inject HttpClient HttpClient
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Grafana API Test</PageTitle>
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3><i class="fas fa-chart-line me-2"></i>Grafana API Test Panel</h3>
+                </div>
+                <div class="card-body">
+
+                    <!-- Test Butonları -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <button class="btn btn-success w-100 mb-2" @onclick="TestHealth" disabled="@isLoading">
+                                <i class="fas fa-heartbeat me-2"></i>Health Check
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-info w-100 mb-2" @onclick="TestConnection" disabled="@isLoading">
+                                <i class="fas fa-plug me-2"></i>Test Connection
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <button class="btn btn-warning w-100 mb-2" @onclick="TestSearch" disabled="@isLoading">
+                                <i class="fas fa-search me-2"></i>Search Metrics
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-secondary w-100 mb-2" @onclick="TestVariables" disabled="@isLoading">
+                                <i class="fas fa-code me-2"></i>Test Variables
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary w-100 mb-2" @onclick="TestQuery" disabled="@isLoading">
+                                <i class="fas fa-database me-2"></i>Test Query
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sonuçlar -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Test Sonuçları</h5>
+                                </div>
+                                <div class="card-body">
+                                    @if (isLoading)
+                                    {
+                                        <div class="text-center">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrEmpty(testResult))
+                                    {
+                                        <pre class="bg-light p-3 rounded"><code>@testResult</code></pre>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">Henüz test çalıştırılmadı.</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grafana Kurulum Talimatları -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle me-2"></i>Grafana Kurulum Talimatları:</h6>
+                                <ol>
+                                    <li><strong>Data Source Ekle:</strong> Configuration → Data Sources → Add data source</li>
+                                    <li><strong>JSON API seç:</strong> SimpleJSON plugin kullan</li>
+                                    <li><strong>URL:</strong> <code>http://localhost:5000/api/grafana</code></li>
+                                    <li><strong>Test endpoints:</strong> Bu sayfadaki butonları kullan</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoading = false;
+    private string testResult = "";
+
+    private async Task TestHealth()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await HttpClient.GetAsync("/api/grafana/health");
+            var content = await response.Content.ReadAsStringAsync();
+            testResult = $"Health Check Response:\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<object>(content), new JsonSerializerOptions { WriteIndented = true })}";
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestConnection()
+    {
+        isLoading = true;
+        try
+        {
+            var content = new StringContent("{}", Encoding.UTF8, "application/json");
+            var response = await HttpClient.PostAsync("/api/grafana/test", content);
+            var result = await response.Content.ReadAsStringAsync();
+            testResult = $"Connection Test Response:\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<object>(result), new JsonSerializerOptions { WriteIndented = true })}";
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestSearch()
+    {
+        isLoading = true;
+        try
+        {
+            var searchRequest = new { target = "nakit" };
+            var json = JsonSerializer.Serialize(searchRequest);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await HttpClient.PostAsync("/api/grafana/search", content);
+            var result = await response.Content.ReadAsStringAsync();
+            testResult = $"Search Response:\n{result}";
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestVariables()
+    {
+        isLoading = true;
+        try
+        {
+            var variableRequest = new { variable = "kaynak_kurulus" };
+            var json = JsonSerializer.Serialize(variableRequest);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await HttpClient.PostAsync("/api/grafana/variable", content);
+            var result = await response.Content.ReadAsStringAsync();
+            testResult = $"Variables Response:\n{result}";
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestQuery()
+    {
+        isLoading = true;
+        try
+        {
+            var queryRequest = new
+            {
+                targets = new[]
+                {
+                    new { target = "nakit_akis.toplam_faiz", refId = "A" },
+                    new { target = "nakit_akis.model_faiz", refId = "B" }
+                },
+                range = new
+                {
+                    from = DateTime.UtcNow.AddDays(-7),
+                    to = DateTime.UtcNow
+                },
+                maxDataPoints = 100
+            };
+
+            var json = JsonSerializer.Serialize(queryRequest);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await HttpClient.PostAsync("/api/grafana/query", content);
+            var result = await response.Content.ReadAsStringAsync();
+            testResult = $"Query Response:\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<object>(result), new JsonSerializerOptions { WriteIndented = true })}";
+        }
+        catch (Exception ex)
+        {
+            testResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

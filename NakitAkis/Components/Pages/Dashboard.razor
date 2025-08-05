@@ -1,0 +1,521 @@
+﻿@page "/dashboard"
+@page "/"
+@using NakitAkis.Models
+@using NakitAkis.Services
+@using System.Text.Json
+@using System.Text
+@using System.Net.Http.Headers
+@inject INakitAkisService NakitAkisService
+@inject IJSRuntime JSRuntime
+@inject HttpClient HttpClient
+@rendermode InteractiveServer
+
+<PageTitle>Nakit Akış Dashboard</PageTitle>
+
+<Container Fluid>
+    <!-- Header Section -->
+    <div class="dashboard-header text-center">
+        <h1 class="mb-3">
+            <i class="fas fa-chart-line me-3"></i>
+            Nakit Akış Analizi Dashboard
+        </h1>
+        <p class="mb-0">PostgreSQL veritabanındaki nakit akış verilerinizi analiz edin, grafiklerle görselleştirin ve raporlarınızı dışa aktarın</p>
+    </div>
+
+    @if (!connectionOk)
+    {
+        <Alert Color="Color.Danger" Class="alert-modern">
+            <AlertMessage>
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Veritabanı bağlantısı kurulamadı. Lütfen bağlantı ayarlarını kontrol edin.
+            </AlertMessage>
+        </Alert>
+    }
+
+    <!-- Form Section -->
+    <Row>
+        <Column ColumnSize="ColumnSize.Is12">
+            <Card Class="card-modern">
+                <CardBody>
+                    <Tabs @bind-SelectedTab="selectedTab">
+                        <Items>
+                            <Tab Name="parametric">
+                                <i class="fas fa-sliders-h me-2"></i>Parametreli Analiz
+                            </Tab>
+                            <Tab Name="default">
+                                <i class="fas fa-eye me-2"></i>Varsayılan Görünüm
+                            </Tab>
+                        </Items>
+                        <Content>
+                            <TabPanel Name="parametric">
+                                <EditForm Model="parametreler" OnValidSubmit="HandleValidSubmit">
+                                    <DataAnnotationsValidator />
+
+                                    <Row Class="g-4">
+                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-percentage me-2"></i>Faiz Oranı (%)
+                                                </FieldLabel>
+                                                <NumericPicker TValue="decimal"
+                                                               @bind-Value="parametreler.FaizOrani"
+                                                               Step="0.01m"
+                                                               Min="0.01m"
+                                                               Max="1.0m"
+                                                               Class="form-control-modern"
+                                                               Placeholder="Örn: 0.45" />
+                                                <ValidationMessage For="() => parametreler.FaizOrani" />
+                                            </Field>
+                                        </Column>
+
+                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-building me-2"></i>Kaynak Kuruluş
+                                                </FieldLabel>
+                                                <Select TValue="string"
+                                                        @bind-SelectedValue="parametreler.KaynakKurulus"
+                                                        Class="form-control-modern">
+                                                    @foreach (var kurum in kaynakKuruluslar)
+                                                    {
+                                                        <SelectItem Value="kurum.KaynakKurulus">
+                                                            @kurum.KaynakKurulus (@kurum.KayitSayisi kayıt)
+                                                        </SelectItem>
+                                                    }
+                                                </Select>
+                                            </Field>
+                                        </Column>
+                                    </Row>
+
+                                    <Row Class="g-4 mt-2">
+                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-calendar-alt me-2"></i>Başlangıç Tarihi
+                                                </FieldLabel>
+                                                <div class="date-picker-modern">
+                                                    <DatePicker TValue="DateTime?"
+                                                                @bind-Date="parametreler.BaslangicTarihi"
+                                                                Placeholder="GG/AA/YYYY"
+                                                                DisplayFormat="dd/MM/yyyy"
+                                                                InputFormat="dd/MM/yyyy"
+                                                                Min="new DateTime(2000, 1, 1)"
+                                                                Max="new DateTime(2100, 12, 31)" />
+                                                </div>
+                                            </Field>
+                                        </Column>
+
+                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-calendar-check me-2"></i>Bitiş Tarihi
+                                                </FieldLabel>
+                                                <div class="date-picker-modern">
+                                                    <DatePicker TValue="DateTime?"
+                                                                @bind-Date="parametreler.BitisTarihi"
+                                                                Placeholder="GG/AA/YYYY"
+                                                                DisplayFormat="dd/MM/yyyy"
+                                                                InputFormat="dd/MM/yyyy"                                                                                                                             
+                                                                Min="new DateTime(2000, 1, 1)"
+                                                                Max="new DateTime(2100, 12, 31)" />
+                                                </div>
+                                            </Field>
+                                        </Column>
+                                    </Row>
+
+                                    <Field Class="mt-4">
+                                        <FieldLabel>
+                                            <i class="fas fa-university me-2"></i>Bankalar (Çoklu Seçim)
+                                        </FieldLabel>
+                                        <Select TValue="string"
+                                                @bind-SelectedValues="selectedBankalar"
+                                                Multiple
+                                                Class="form-control-modern">
+                                            @foreach (var banka in bankalar)
+                                            {
+                                                <SelectItem Value="banka.BankaAdi">
+                                                    @banka.BankaAdi (@banka.KayitSayisi kayıt)
+                                                </SelectItem>
+                                            }
+                                        </Select>
+                                        <FieldHelp>
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Boş bırakırsanız tüm bankalar dahil edilir
+                                        </FieldHelp>
+                                    </Field>
+
+                                    <div class="text-center mt-4">
+                                        <Buttons Class="gap-3">
+                                            <Button Color="Color.Primary"
+                                                    Type="ButtonType.Submit"
+                                                    Loading="isLoading"
+                                                    Class="btn-modern">
+                                                @if (isLoading)
+                                                {
+                                                    <span class="loading-spinner me-2"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="fas fa-search me-2"></i>
+                                                }
+                                                Analizi Çalıştır
+                                            </Button>
+                                            <Button Color="Color.Secondary"
+                                                    Clicked="ResetParameters"
+                                                    Outline
+                                                    Class="btn-modern">
+                                                <i class="fas fa-undo me-2"></i>
+                                                Sıfırla
+                                            </Button>
+                                        </Buttons>
+                                    </div>
+                                </EditForm>
+                            </TabPanel>
+
+                            <TabPanel Name="default">
+                                <div class="text-center">
+                                    <div class="mb-4">
+                                        <i class="fas fa-bolt fa-3x text-primary mb-3"></i>
+                                        <h4>Hızlı Analiz</h4>
+                                        <p class="text-muted">
+                                            Varsayılan parametrelerle hızlı görünüm:<br>
+                                            <Badge Color="Color.Primary">Faiz Oranı: 45%</Badge>
+                                            <Badge Color="Color.Info" Class="ms-2">Kaynak Kuruluş: FİBABANKA</Badge>
+                                        </p>
+                                    </div>
+                                    <Button Color="Color.Info"
+                                            Clicked="LoadDefaultView"
+                                            Loading="isLoadingDefault"
+                                            Class="btn-modern">
+                                        @if (isLoadingDefault)
+                                        {
+                                            <span class="loading-spinner me-2"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="fas fa-eye me-2"></i>
+                                        }
+                                        Varsayılan Görünümü Yükle
+                                    </Button>
+                                </div>
+                            </TabPanel>
+                        </Content>
+                    </Tabs>
+                </CardBody>
+            </Card>
+        </Column>
+    </Row>
+
+    <!-- Results Section -->
+    @if (sonuc != null)
+    {
+        <!-- Metrics Cards -->
+        <Row Class="g-4 mt-4">
+            <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="metric-value">₺@sonuc.ToplamFaizTutari.ToString("N2")</div>
+                    <div class="metric-label">Toplam Faiz Tutarı</div>
+                </div>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                    <div class="metric-value">₺@sonuc.ToplamModelFaizTutari.ToString("N2")</div>
+                    <div class="metric-label">Model Faiz Tutarı</div>
+                </div>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="metric-value">₺@sonuc.FarkTutari.ToString("N2")</div>
+                    <div class="metric-label">Fark Tutarı</div>
+                </div>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <div class="metric-value">%@sonuc.FarkYuzdesi.ToString("N2")</div>
+                    <div class="metric-label">Fark Yüzdesi</div>
+                </div>
+            </Column>
+        </Row>
+
+        <!-- Charts Section -->
+        <div class="chart-container">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Grafik Görünümleri
+                </h5>
+                <div class="chart-tabs">
+                    <button class="chart-tab @(activeChartTab == "bar" ? "active" : "")"
+                            @onclick='() => SetActiveChartTab("bar")'>
+                        <i class="fas fa-chart-bar me-2"></i>Bar Chart
+                    </button>
+                    <button class="chart-tab @(activeChartTab == "pie" ? "active" : "")"
+                            @onclick='() => SetActiveChartTab("pie")'>
+                        <i class="fas fa-chart-pie me-2"></i>Pie Chart
+                    </button>
+                    <button class="chart-tab @(activeChartTab == "doughnut" ? "active" : "")"
+                            @onclick='() => SetActiveChartTab("doughnut")'>
+                        <i class="fas fa-circle-notch me-2"></i>Doughnut
+                    </button>
+                </div>
+            </div>
+
+            <Row>
+                <Column ColumnSize="ColumnSize.Is12">
+                    @if (activeChartTab == "bar")
+                    {
+                        <canvas id="barChart" width="400" height="200"></canvas>
+                    }
+                    else if (activeChartTab == "pie")
+                    {
+                        <canvas id="pieChart" width="400" height="200"></canvas>
+                    }
+                    else if (activeChartTab == "doughnut")
+                    {
+                        <canvas id="doughnutChart" width="400" height="200"></canvas>
+                    }
+                </Column>
+            </Row>
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+            <div class="text-center">
+                <h4>
+                    <i class="fas fa-download me-2"></i>
+                    Rapor Dışa Aktarma
+                </h4>
+                <p class="mb-0">Analiz sonuçlarınızı farklı formatlarda indirebilirsiniz</p>
+
+                <div class="export-buttons">
+                    <button class="btn btn-export"
+                            @onclick='() => ExportData("excel")'
+                            disabled="@isExporting">
+                        @if (isExporting && exportType == "excel")
+                        {
+                            <span class="loading-spinner me-2"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-file-excel me-2"></i>
+                        }
+                        Excel İndir
+                    </button>
+
+                    <button class="btn btn-export"
+                            @onclick='() => ExportData("csv")'
+                            disabled="@isExporting">
+                        @if (isExporting && exportType == "csv")
+                        {
+                            <span class="loading-spinner me-2"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-file-csv me-2"></i>
+                        }
+                        CSV İndir
+                    </button>
+
+                    <button class="btn btn-export"
+                            @onclick='() => ExportData("html")'
+                            disabled="@isExporting">
+                        @if (isExporting && exportType == "html")
+                        {
+                            <span class="loading-spinner me-2"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-code me-2"></i>
+                        }
+                        HTML Görüntüle
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</Container>
+
+@code {
+    private NakitAkisParametre parametreler = new();
+    private NakitAkisSonuc? sonuc;
+    private List<BankaBilgi> bankalar = new();
+    private List<KaynakKurulusBilgi> kaynakKuruluslar = new();
+    private IReadOnlyList<string> selectedBankalar = new List<string>();
+
+    private bool isLoading = false;
+    private bool isLoadingDefault = false;
+    private bool isExporting = false;
+    private bool connectionOk = true;
+    private string selectedTab = "parametric";
+    private string activeChartTab = "bar";
+    private string exportType = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        connectionOk = await NakitAkisService.TestConnectionAsync();
+
+        if (connectionOk)
+        {
+            bankalar = await NakitAkisService.GetBankalarAsync();
+            kaynakKuruluslar = await NakitAkisService.GetKaynakKuruluslarAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (sonuc != null)
+        {
+            await UpdateCharts();
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        isLoading = true;
+        try
+        {
+            parametreler.SecilenBankalar = selectedBankalar.ToList();
+            sonuc = await NakitAkisService.GetNakitAkisAnaliziAsync(parametreler);
+            await UpdateCharts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadDefaultView()
+    {
+        isLoadingDefault = true;
+        try
+        {
+            var defaultParams = new NakitAkisParametre
+            {
+                FaizOrani = 0.45m,
+                KaynakKurulus = "FİBABANKA"
+            };
+
+            sonuc = await NakitAkisService.GetNakitAkisAnaliziAsync(defaultParams);
+            await UpdateCharts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingDefault = false;
+        }
+    }
+
+    private void ResetParameters()
+    {
+        parametreler = new NakitAkisParametre();
+        selectedBankalar = new List<string>();
+        sonuc = null;
+    }
+
+    private async Task SetActiveChartTab(string tabName)
+    {
+        activeChartTab = tabName;
+        await UpdateCharts();
+    }
+
+    private async Task UpdateCharts()
+    {
+        if (sonuc == null) return;
+
+        var chartData = new
+        {
+            labels = new[] { "Toplam Faiz", "Model Faiz", "Fark" },
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Tutarlar (₺)",
+                    data = new[] { sonuc.ToplamFaizTutari, sonuc.ToplamModelFaizTutari, Math.Abs(sonuc.FarkTutari) },
+                    backgroundColor = new[]
+                    {
+                        "rgba(102, 126, 234, 0.8)",
+                        "rgba(56, 239, 125, 0.8)",
+                        "rgba(245, 87, 108, 0.8)"
+                    },
+                    borderColor = new[]
+                    {
+                        "rgba(102, 126, 234, 1)",
+                        "rgba(56, 239, 125, 1)",
+                        "rgba(245, 87, 108, 1)"
+                    },
+                    borderWidth = 2
+                }
+            }
+        };
+
+        if (activeChartTab == "bar")
+        {
+            await JSRuntime.InvokeVoidAsync("createBarChart", "barChart", chartData);
+        }
+        else if (activeChartTab == "pie")
+        {
+            await JSRuntime.InvokeVoidAsync("createPieChart", "pieChart", chartData);
+        }
+        else if (activeChartTab == "doughnut")
+        {
+            await JSRuntime.InvokeVoidAsync("createDoughnutChart", "doughnutChart", chartData);
+        }
+    }
+
+    private async Task ExportData(string format)
+    {
+        if (sonuc == null || parametreler == null) return;
+
+        isExporting = true;
+        exportType = format;
+
+        try
+        {
+            var exportRequest = new
+            {
+                Parametreler = new
+                {
+                    parametreler.FaizOrani,
+                    parametreler.KaynakKurulus,
+                    parametreler.SecilenBankalar,
+                    parametreler.BaslangicTarihi,
+                    parametreler.BitisTarihi
+                }
+            };
+
+            var json = JsonSerializer.Serialize(exportRequest);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            if (format == "html")
+            {
+                // HTML'i yeni sekmede aç
+                var response = await HttpClient.PostAsync($"/api/export/{format}", content);
+                if (response.IsSuccessStatusCode)
+                {
+                    var htmlContent = await response.Content.ReadAsStringAsync();
+                    await JSRuntime.InvokeVoidAsync("openHtmlInNewTab", htmlContent);
+                }
+            }
+            else
+            {
+                // Dosya indirme
+                await JSRuntime.InvokeVoidAsync("downloadFile", $"/api/export/{format}", json);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Export error: {ex.Message}");
+        }
+        finally
+        {
+            isExporting = false;
+            exportType = "";
+        }
+    }
+}

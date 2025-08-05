@@ -1,0 +1,242 @@
+﻿/* Dashboard CSS - Modern Responsive Design */
+
+.dashboard-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    border-radius: 15px;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.card-modern {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+    .card-modern:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+    }
+
+.form-control-modern {
+    border-radius: 10px;
+    border: 2px solid #e3f2fd;
+    padding: 12px 16px;
+    transition: all 0.3s ease;
+}
+
+    .form-control-modern:focus {
+        border-color: #2196f3;
+        box-shadow: 0 0 0 0.2rem rgba(33, 150, 243, 0.25);
+    }
+
+.btn-modern {
+    border-radius: 25px;
+    padding: 12px 30px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+    border: none;
+}
+
+    .btn-modern:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    padding: 1.5rem;
+    color: white;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+    .metric-card:hover {
+        transform: scale(1.05);
+    }
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.metric-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.tab-modern .nav-link {
+    border-radius: 25px;
+    margin: 0 5px;
+    transition: all 0.3s ease;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.date-picker-modern {
+    position: relative;
+}
+
+    .date-picker-modern input {
+        background: white;
+        border: 2px solid #e3f2fd;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+        width: 100%;
+    }
+
+.alert-modern {
+    border-radius: 15px;
+    border: none;
+    padding: 1rem 1.5rem;
+}
+
+.chart-container {
+    background: white;
+    border-radius: 15px;
+    padding: 2rem;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    margin-top: 2rem;
+}
+
+.chart-tabs {
+    border-bottom: 2px solid #f8f9fa;
+    margin-bottom: 2rem;
+}
+
+.chart-tab {
+    padding: 10px 20px;
+    margin-right: 10px;
+    border: none;
+    background: transparent;
+    border-radius: 25px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+    .chart-tab.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .chart-tab:hover {
+        background: #f8f9fa;
+    }
+
+    .chart-tab.active:hover {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+.export-section {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    border-radius: 15px;
+    padding: 2rem;
+    color: white;
+    margin-top: 2rem;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 1.5rem;
+}
+
+.btn-export {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 25px;
+    padding: 10px 25px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+    .btn-export:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .btn-export:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .dashboard-header {
+        padding: 1.5rem;
+    }
+
+        .dashboard-header h1 {
+            font-size: 1.8rem;
+        }
+
+    .metric-value {
+        font-size: 1.5rem;
+    }
+
+    .chart-container {
+        padding: 1rem;
+    }
+
+    .export-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .btn-export {
+        width: 200px;
+    }
+}
+
+@media (max-width: 576px) {
+    .dashboard-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .metric-value {
+        font-size: 1.3rem;
+    }
+
+    .chart-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .chart-tab {
+        margin: 5px;
+        font-size: 0.9rem;
+    }
+}

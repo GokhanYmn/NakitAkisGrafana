@@ -1,0 +1,39 @@
+﻿html, body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+#blazor-error-ui {
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPjxkZWZzPjxyZWN0IGlkPSJhIiB3aWR0aD0iNTYiIGhlaWdodD0iNDkiLz48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj48bWFzayBpZD0iYiIgZmlsbD0iI2ZmZiI+PHVzZSB4bGluazpocmVmPSIjYSIvPjwvbWFzaz48cGF0aCBmaWxsPSIjRkY1NTU2IiBkPSJNMjkgNC4wM2MxLjE2OSAwIDIuMDEuODkgMi4wMSAyLjAzIDAgLjQyLS4xNDcuODM1LS40MzYgMS4xNGwtMTMuNDQzIDEwLjY5NWExLjA5NCAxLjA5NCAwIDAxLTEuMzQxLS4wM2wtMTEuODc0LTkuNDk0YTEuOTc1IDEuOTc1IDAgMDEtLjQzNi0xLjEzOUMzLjQ4IDQuOTIzIDQuMzIgNC4wMyA1LjQ5IDQuMDNoMjMuNTF6bTEuMzM2IDM2LjQ2OWEyLjAyIDIuMDIgMCAwMS0yLjAyIDIuMDJjLTEuMTIgMC0yLjAyLS45MDMtMi4wMi0yLjAyVjI0Ljc4N2MwLTEuMTE4LjkwMS0yLjAyIDIuMDItMi4wMnMyLjAyLjkwMiAyLjAyIDIuMDJ2MTUuNzEyeiIgbWFzaz0idXJsKCNiKSIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "Bir hata oluştu."
+    }
+
+.card-metric {
+    transition: transform 0.2s;
+}
+
+    .card-metric:hover {
+        transform: translateY(-2px);
+    }
