@@ -7,6 +7,7 @@ namespace NakitAkis.Services
         Task<NakitAkisSonuc> GetNakitAkisAnaliziAsync(NakitAkisParametre parametre);
         Task<List<BankaBilgi>> GetBankalarAsync();
         Task<List<KaynakKurulusBilgi>> GetKaynakKuruluslarAsync();
+        Task<List<NakitAkisHistoricalData>> GetHistoricalDataAsync(NakitAkisParametre parametre,DateTime fromDate,DateTime toDate);
         Task<bool> TestConnectionAsync();
     }
 }

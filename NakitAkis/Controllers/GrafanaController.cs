@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using NakitAkis.Models;
 using NakitAkis.Services;
+using Nest;
+using System.Text.Json;
 
 namespace NakitAkis.Controllers
 {
@@ -47,7 +49,12 @@ namespace NakitAkis.Controllers
         {
             try
             {
-                _logger.LogInformation("Grafana query received: {request}", requestData);
+                var jsonString = System.Text.Json.JsonSerializer.Serialize(requestData);
+                _logger.LogInformation("Full request: {request}", jsonString);
+
+               
+
+                _logger.LogInformation("Grafana query received");
 
                 // Default parametreler
                 var parametreler = new NakitAkisParametre
@@ -56,40 +63,101 @@ namespace NakitAkis.Controllers
                     KaynakKurulus = "FİBABANKA"
                 };
 
-                var sonuc = await _nakitAkisService.GetNakitAkisAnaliziAsync(parametreler);
+                // Basit tarih aralığı
+                DateTime fromDate = DateTime.UtcNow.AddMonths(-6);
+                DateTime toDate = DateTime.UtcNow;
 
-                // Grafana için basit format - sadece değerler
+                var historicalData = await _nakitAkisService.GetHistoricalDataAsync(
+                    parametreler, fromDate, toDate);
+
+                _logger.LogInformation("Historical data count: {count}", historicalData.Count);
+
+                // Grafana formatına çevir
+                var toplamFaizDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.ToplamFaizTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var modelFaizDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.ToplamModelFaizTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var farkTutariDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.FarkTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var farkYuzdesiDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.FarkYuzdesi,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
                 var result = new[]
                 {
-                    new
-                    {
-                        target = "nakit_akis.toplam_faiz",
-                        datapoints = new object[][]
-                        {
-                            new object[] { (double)sonuc.ToplamFaizTutari, 1736241075000 }
-                        }
-                    },
-                    new
-                    {
-                        target = "nakit_akis.model_faiz",
-                        datapoints = new object[][]
-                        {
-                            new object[] { (double)sonuc.ToplamModelFaizTutari, 1736241075000 }
-                        }
-                    }
-                };
+            new
+            {
+                target = "nakit_akis.toplam_faiz",
+                datapoints = toplamFaizDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.model_faiz",
+                datapoints = modelFaizDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.fark_tutari",
+                datapoints = farkTutariDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.fark_yuzdesi",
+                datapoints = farkYuzdesiDataPoints
+            }
+        };
 
                 return Ok(result);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Grafana query failed: {error}", ex.Message);
+                _logger.LogError(ex, "Grafana query failed: {error} - {details}", ex.Message, ex.ToString());
                 return StatusCode(500, new { error = ex.Message, details = ex.ToString() });
             }
         }
-    
-        
-    
+
+        // Helper method ekleyin
+        private TimeSpan ParseGrafanaTimeRange(string range)
+        {
+            // "now-6M", "now-30d", "now-24h" formatlarını parse et
+            if (range.StartsWith("now-"))
+            {
+                var timeStr = range.Substring(4);
+                if (timeStr.EndsWith("M"))
+                {
+                    if (int.TryParse(timeStr.TrimEnd('M'), out var months))
+                        return TimeSpan.FromDays(-months * 30);
+                }
+                else if (timeStr.EndsWith("d"))
+                {
+                    if (int.TryParse(timeStr.TrimEnd('d'), out var days))
+                        return TimeSpan.FromDays(-days);
+                }
+                else if (timeStr.EndsWith("h"))
+                {
+                    if (int.TryParse(timeStr.TrimEnd('h'), out var hours))
+                        return TimeSpan.FromHours(-hours);
+                }
+            }
+            return TimeSpan.FromDays(-180); // Default 6 ay
+        }
+
+
+
 
         // Grafana Search - Metrik keşfi
         [HttpPost("search")]
@@ -119,7 +187,90 @@ namespace NakitAkis.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
+        // Variable destekli query endpoint
+        [HttpGet("query-with-variable")]
+        public async Task<IActionResult> QueryWithVariable([FromQuery] string kaynak_kurulus = "FİBABANKA")
+        {
+            try
+            {
+                _logger.LogInformation("=== VARIABLE DEBUG ===");
+                _logger.LogInformation("Query parameter kaynak_kurulus: '{kurulus}'", kaynak_kurulus);
+                _logger.LogInformation("Parameter is null: {isNull}", kaynak_kurulus == null);
+                _logger.LogInformation("Parameter is empty: {isEmpty}", string.IsNullOrEmpty(kaynak_kurulus));
+                _logger.LogInformation("========================");
 
+                var parametreler = new NakitAkisParametre
+                {
+                    FaizOrani = 0.45m,
+                    KaynakKurulus = kaynak_kurulus ?? "FİBABANKA"
+                };
+
+                _logger.LogInformation("Final parameter kaynak_kurulus: '{kurulus}'", parametreler.KaynakKurulus);
+
+                DateTime fromDate = DateTime.UtcNow.AddYears(-2);
+                DateTime toDate = DateTime.UtcNow;
+
+                var historicalData = await _nakitAkisService.GetHistoricalDataAsync(
+                    parametreler, fromDate, toDate);
+
+                _logger.LogInformation("Historical data count: {count} for kurulus: {kurulus}", historicalData.Count, kaynak_kurulus);
+
+                var toplamFaizDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.ToplamFaizTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var modelFaizDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.ToplamModelFaizTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var farkTutariDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.FarkTutari,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var farkYuzdesiDataPoints = historicalData.Select(h => new object[]
+                {
+            (double)h.FarkYuzdesi,
+            ((DateTimeOffset)h.Tarih.Date).ToUnixTimeMilliseconds()
+                }).ToArray();
+
+                var result = new[]
+                {
+            new
+            {
+                target = "nakit_akis.toplam_faiz",
+                datapoints = toplamFaizDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.model_faiz",
+                datapoints = modelFaizDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.fark_tutari",
+                datapoints = farkTutariDataPoints
+            },
+            new
+            {
+                target = "nakit_akis.fark_yuzdesi",
+                datapoints = farkYuzdesiDataPoints
+            }
+        };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Variable query failed: {error}", ex.Message);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
         // Grafana Variable Support
         [HttpPost("variable")]
         public async Task<IActionResult> Variable([FromBody] GrafanaVariableRequest request)

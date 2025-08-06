@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace NakitAkis.Services
 {
-    public class NakitAkisService:INakitAkisService
+    public class NakitAkisService : INakitAkisService
     {
         private readonly string _connectionString;
         private readonly ILogger<NakitAkisService> _logger;
@@ -28,7 +28,7 @@ namespace NakitAkis.Services
 
                 // Decimal overflow'u önlemek için double kullan
                 var result = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, new
-                {                  
+                {
                     FaizOrani = parametre.FaizOrani,
                     KaynakKurulus = parametre.KaynakKurulus,
                     BaslangicTarihi = parametre.BaslangicTarihi,
@@ -77,7 +77,62 @@ namespace NakitAkis.Services
             }
 
         }
+        public async Task<List<NakitAkisHistoricalData>> GetHistoricalDataAsync(NakitAkisParametre parametre, DateTime fromDate, DateTime toDate)
+        {
+            try
+            {
+                _logger.LogInformation("Historical data request: {kurulus}, {from} - {to}",
+                    parametre.KaynakKurulus, fromDate, toDate);
 
+                using var connection = new NpgsqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
+
+                // GERÇEK HESAPLAMA İLE SORGU
+                var sql = $@"
+            SELECT 
+                baslangic_tarihi::date as Tarih,
+                SUM(
+                    CASE 
+                        WHEN faiz_tutari IS NOT NULL AND faiz_tutari > 0 
+                        THEN faiz_tutari
+                        ELSE mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.0
+                    END
+                ) as ToplamFaizTutari,
+                SUM(
+                    mevduat_tutari * (1 + @FaizOrani / 365.0)^(donus_tarihi - baslangic_tarihi) - mevduat_tutari
+                ) as ToplamModelFaizTutari
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus
+              AND baslangic_tarihi >= @FromDate 
+              AND baslangic_tarihi <= @ToDate
+              AND toplam_donus > 0
+              {bankaFilter}
+            GROUP BY baslangic_tarihi::date
+            ORDER BY Tarih
+            LIMIT 100";
+
+                var result = await connection.QueryAsync<NakitAkisHistoricalData>(sql, new
+                {
+                    FaizOrani = parametre.FaizOrani,
+                    KaynakKurulus = parametre.KaynakKurulus,
+                    FromDate = fromDate,
+                    ToDate = toDate
+                });
+
+                _logger.LogInformation("Query returned {count} records for kurulus: {kurulus}",
+                    result.Count(), parametre.KaynakKurulus);
+
+                return result.ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting historical data for {kurulus}: {message}",
+                    parametre.KaynakKurulus, ex.Message);
+                return new List<NakitAkisHistoricalData>();
+            }
+        }
         private string BuildAnalysisQuery(NakitAkisParametre parametre)
         {
             var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
@@ -213,4 +268,4 @@ namespace NakitAkis.Services
         }
     }
 }
-   
+
