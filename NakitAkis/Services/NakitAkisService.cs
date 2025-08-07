@@ -30,7 +30,7 @@ namespace NakitAkis.Services
                 var result = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, new
                 {
                     FaizOrani = parametre.FaizOrani,
-                    ModelFaizOrani=parametre.ModelFaizOrani,
+                    ModelFaizOrani = parametre.ModelFaizOrani,
                     KaynakKurulus = parametre.KaynakKurulus,
                     BaslangicTarihi = parametre.BaslangicTarihi,
                     BitisTarihi = parametre.BitisTarihi,
@@ -168,50 +168,74 @@ namespace NakitAkis.Services
 
                 using var connection = new NpgsqlConnection(_connectionString);
                 await connection.OpenAsync();
-
+               
                 var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
+                var fonFilter = BuildFonFilter(parametre.SecilenFonNo);
+                var ihracFilter = BuildIhracFilter(parametre.SecilenIhracNo);
 
                 // GERÇEK HESAPLAMA İLE SORGU
                 var sql = $@"
-            WITH daily_data AS (
+           WITH daily_data AS (
                 SELECT 
                     DATE(baslangic_tarihi) as gun,
-                    SUM(faiz_tutari)::decimal as toplam_faiz,
-                    SUM(model_faiz_tutari)::decimal as toplam_model_faiz
+                    SUM(COALESCE(faiz_tutari, 0))::float8 as toplam_faiz,
+                    SUM(COALESCE(model_faiz_tutari, 0))::float8 as toplam_model_faiz
                 FROM (
                     SELECT *,
                            donus_tarihi - baslangic_tarihi as vade,
-                           (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00 / (donus_tarihi - baslangic_tarihi)) - 1 as bilesik_faiz,
-                           mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari as model_faiz_tutari                  
+                           (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00 / NULLIF(donus_tarihi - baslangic_tarihi, 0)) - 1 as bilesik_faiz,
+                           CASE 
+                               WHEN donus_tarihi - baslangic_tarihi > 0 THEN 
+                                   mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari
+                               ELSE 0 
+                           END as model_faiz_tutari
                     FROM (      
                         SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
-                               baslangic_tarihi, mevduat_tutari, @ModelFaizOrani as faiz_orani, donus_tarihi,
-                               mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 as faiz_tutari,
-                               mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 + toplam_donus as toplam_donus,
+                               baslangic_tarihi, 
+                               COALESCE(mevduat_tutari, 0) as mevduat_tutari, 
+                               @ModelFaizOrani as faiz_orani, 
+                               donus_tarihi,
+                               CASE 
+                                   WHEN donus_tarihi > baslangic_tarihi THEN
+                                       COALESCE(mevduat_tutari, 0) * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00
+                                   ELSE 0
+                               END as faiz_tutari,
+                               COALESCE(toplam_donus, 0) as toplam_donus,
                                (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik  
                         FROM nakit_akis na 
                         WHERE banka_adi LIKE '%ZBJ%' 
                           AND baslangic_tarihi >= @FromDate
                           AND baslangic_tarihi <= @ToDate
+                          AND COALESCE(mevduat_tutari, 0) > 0
+                          AND donus_tarihi > baslangic_tarihi
+                          {fonFilter}
+                          {ihracFilter}
                         
-                        UNION
+                        UNION ALL
                         
                         SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
-                               baslangic_tarihi, mevduat_tutari,
-                               CASE WHEN faiz_tutari = 0 THEN 0.48 ELSE faiz_orani END as faiz_orani,
+                               baslangic_tarihi, 
+                               COALESCE(mevduat_tutari, 0) as mevduat_tutari,
+                               CASE WHEN COALESCE(faiz_tutari, 0) = 0 THEN 0.48 ELSE COALESCE(faiz_orani, 0.48) END as faiz_orani,
                                donus_tarihi,
-                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
-                                    ELSE faiz_tutari END as faiz_tutari,
-                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari + mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
-                                    ELSE toplam_donus END as toplam_donus,
+                               CASE 
+                                   WHEN COALESCE(faiz_tutari, 0) = 0 AND donus_tarihi > baslangic_tarihi THEN 
+                                       COALESCE(mevduat_tutari, 0) * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
+                                   ELSE COALESCE(faiz_tutari, 0) 
+                               END as faiz_tutari,
+                               COALESCE(toplam_donus, 0) as toplam_donus,
                                (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik       
                         FROM nakit_akis na 
                         WHERE banka_adi NOT LIKE '%ZBJ%' 
-                          AND toplam_donus > 0
+                          AND COALESCE(toplam_donus, 0) > 0
                           AND baslangic_tarihi >= @FromDate
                           AND baslangic_tarihi <= @ToDate
+                          AND COALESCE(mevduat_tutari, 0) > 0
+                          AND donus_tarihi > baslangic_tarihi
+                          {fonFilter}
+                          {ihracFilter}
                     ) K            
-                    WHERE toplam_donus > 0
+                    WHERE COALESCE(toplam_donus, 0) > 0
                       AND kaynak_kurulus = @KaynakKurulus
                 ) K
                 GROUP BY DATE(baslangic_tarihi)
@@ -221,19 +245,22 @@ namespace NakitAkis.Services
                 COALESCE(toplam_faiz, 0) as ToplamFaizTutari,
                 COALESCE(toplam_model_faiz, 0) as ToplamModelFaizTutari
             FROM daily_data
+            WHERE COALESCE(toplam_faiz, 0) > 0 OR COALESCE(toplam_model_faiz, 0) > 0
             ORDER BY gun";
 
                 var result = await connection.QueryAsync<NakitAkisHistoricalData>(sql, new
                 {
-                    FaizOrani = parametre.FaizOrani,
-                    ModelFaizOrani = parametre.ModelFaizOrani,
+                    FaizOrani = (double)parametre.FaizOrani,
+                    ModelFaizOrani = (double)parametre.ModelFaizOrani,
                     KaynakKurulus = parametre.KaynakKurulus,
                     FromDate = fromDate,
-                    ToDate = toDate
+                    ToDate = toDate,
+                    SecilenFonNo = parametre.SecilenFonNo,     
+                    SecilenIhracNo = parametre.SecilenIhracNo
                 });
 
-                _logger.LogInformation("Query returned {count} records for kurulus: {kurulus}",
-                    result.Count(), parametre.KaynakKurulus);
+                _logger.LogInformation("Query returned {count} records for kurulus: {kurulus}, fon: {fon}",
+             result.Count(), parametre.KaynakKurulus, parametre.SecilenFonNo);
 
                 return result.ToList();
             }
@@ -404,9 +431,29 @@ namespace NakitAkis.Services
         {
             try
             {
+                _logger.LogInformation("=== FONLAR DEBUG START ===");
+                _logger.LogInformation("Requested kurulus: '{kurulus}'", kaynakKurulus);
+
                 using var connection = new NpgsqlConnection(_connectionString);
                 await connection.OpenAsync();
+                _logger.LogInformation("Database connection opened successfully");
 
+                // Önce basit test
+                var testSql = "SELECT COUNT(*) FROM nakit_akis WHERE kaynak_kurulus = @KaynakKurulus";
+                var totalCount = await connection.QuerySingleAsync<int>(testSql, new { KaynakKurulus = kaynakKurulus });
+                _logger.LogInformation("Total records for '{kurulus}': {count}", kaynakKurulus, totalCount);
+
+                // Fon sayısını kontrol et
+                var fonCountSql = @"
+            SELECT COUNT(DISTINCT fon_no) 
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus 
+              AND fon_no IS NOT NULL";
+
+                var fonCount = await connection.QuerySingleAsync<int>(fonCountSql, new { KaynakKurulus = kaynakKurulus });
+                _logger.LogInformation("Distinct fon count for '{kurulus}': {count}", kaynakKurulus, fonCount);
+
+                // Ana sorgu
                 var sql = @"
             SELECT DISTINCT 
                 fon_no as FonNo, 
@@ -415,11 +462,22 @@ namespace NakitAkis.Services
             FROM nakit_akis 
             WHERE kaynak_kurulus = @KaynakKurulus
               AND fon_no IS NOT NULL 
-              AND fon_no != ''
             GROUP BY fon_no
-            ORDER BY fon_no";
+            ORDER BY fon_no
+            LIMIT 10";
 
+                _logger.LogInformation("Executing main query...");
                 var result = await connection.QueryAsync<FonBilgi>(sql, new { KaynakKurulus = kaynakKurulus });
+
+                _logger.LogInformation("Query executed. Result count: {count}", result.Count());
+
+                foreach (var fon in result.Take(3))
+                {
+                    _logger.LogInformation("Fon: {fonNo}, Kayıt: {kayit}, Tutar: {tutar}",
+                        fon.FonNo, fon.KayitSayisi, fon.ToplamTutar);
+                }
+
+                _logger.LogInformation("=== FONLAR DEBUG END ===");
                 return result.ToList();
             }
             catch (Exception ex)

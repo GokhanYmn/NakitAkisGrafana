@@ -60,7 +60,7 @@
                                                 </FieldLabel>
                                                 <Select TValue="string"
                                                         SelectedValue="@parametreler.KaynakKurulus"
-                                                        SelectedValueChanged="OnKaynakKurulusChanged"
+                                                        SelectedValueChanged="@OnKaynakKurulusChanged"
                                                         Class="form-control-modern">
                                                     <SelectItem TValue="string" Value="@("")">Kaynak Kuruluşu Seçiniz</SelectItem>
                                                     @foreach (var kurum in kaynakKuruluslar)
@@ -80,9 +80,9 @@
                                                     <i class="fas fa-folder me-2"></i>Fon Numarası
                                                 </FieldLabel>
                                                 <Select TValue="string"
-                                                        @bind-SelectedValue="parametreler.SecilenFonNo"
+                                                        @bind-SelectedValue="@parametreler.SecilenFonNo"
                                                         Class="form-control-modern"
-                                                        ValueChanged="OnFonNoChanged"
+                                                        ValueChanged="@OnFonNoChanged"
                                                         Disabled="@(!fonlar.Any())">
                                                     <SelectItem Value="@("")">Tüm Fonlar</SelectItem>
                                                     @foreach (var fon in fonlar)
@@ -113,7 +113,7 @@
                                                     <i class="fas fa-file-contract me-2"></i>İhraç Numarası
                                                 </FieldLabel>
                                                 <Select TValue="string"
-                                                        @bind-SelectedValue="parametreler.SecilenIhracNo"
+                                                        @bind-SelectedValue="@parametreler.SecilenIhracNo"
                                                         Class="form-control-modern"
                                                         Disabled="@(!ihraclar.Any() || string.IsNullOrEmpty(parametreler.SecilenFonNo))">
                                                     <SelectItem Value="@("")">Tüm İhraçlar</SelectItem>
@@ -289,7 +289,7 @@
                                         </p>
                                     </div>
                                     <Button Color="Color.Info"
-                                            Clicked="LoadDefaultView"
+                                            Clicked="@LoadDefaultView"
                                             Loading="isLoadingDefault"
                                             Class="btn-modern">
                                         @if (isLoadingDefault)
