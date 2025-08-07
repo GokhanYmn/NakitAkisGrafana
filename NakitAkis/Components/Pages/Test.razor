@@ -1,0 +1,11 @@
+﻿@page "/rawtest"
+@rendermode InteractiveServer
+
+<h3>Raw Test</h3>
+
+<button onclick="@(() => counter++)">Tıkla</button>
+<p>Sayaç: @counter</p>
+
+@code {
+    private int counter = 0;
+}

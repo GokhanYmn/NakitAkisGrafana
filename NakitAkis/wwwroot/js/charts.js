@@ -1,4 +1,8 @@
-﻿window.createBarChart = (canvasId, data) => {
+﻿if (typeof Chart === 'undefined') {
+    console.error('Chart.js yüklenmedi!');
+}
+
+window.createBarChart = (canvasId, data) => {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
 

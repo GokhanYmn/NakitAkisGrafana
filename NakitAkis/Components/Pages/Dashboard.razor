@@ -11,7 +11,6 @@
 @rendermode InteractiveServer
 
 <PageTitle>Nakit Akış Dashboard</PageTitle>
-
 <Container Fluid>
     <!-- Header Section -->
     <div class="dashboard-header text-center">
@@ -21,7 +20,6 @@
         </h1>
         <p class="mb-0">PostgreSQL veritabanındaki nakit akış verilerinizi analiz edin, grafiklerle görselleştirin ve raporlarınızı dışa aktarın</p>
     </div>
-
     @if (!connectionOk)
     {
         <Alert Color="Color.Danger" Class="alert-modern">
@@ -52,97 +50,203 @@
                                     <DataAnnotationsValidator />
 
                                     <Row Class="g-4">
-                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
-                                            <Field>
-                                                <FieldLabel>
-                                                    <i class="fas fa-percentage me-2"></i>Faiz Oranı (%)
-                                                </FieldLabel>
-                                                <NumericPicker TValue="decimal"
-                                                               @bind-Value="parametreler.FaizOrani"
-                                                               Step="0.01m"
-                                                               Min="0.01m"
-                                                               Max="1.0m"
-                                                               Class="form-control-modern"
-                                                               Placeholder="Örn: 0.45" />
-                                                <ValidationMessage For="() => parametreler.FaizOrani" />
-                                            </Field>
-                                        </Column>
 
-                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
+
+                                        <!-- Kaynak Kuruluş -->
+                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
                                             <Field>
                                                 <FieldLabel>
                                                     <i class="fas fa-building me-2"></i>Kaynak Kuruluş
                                                 </FieldLabel>
                                                 <Select TValue="string"
-                                                        @bind-SelectedValue="parametreler.KaynakKurulus"
+                                                        SelectedValue="@parametreler.KaynakKurulus"
+                                                        SelectedValueChanged="OnKaynakKurulusChanged"
                                                         Class="form-control-modern">
+                                                    <SelectItem TValue="string" Value="@("")">Kaynak Kuruluşu Seçiniz</SelectItem>
                                                     @foreach (var kurum in kaynakKuruluslar)
                                                     {
-                                                        <SelectItem Value="kurum.KaynakKurulus">
+                                                        <SelectItem TValue="string" Value="@(kurum.KaynakKurulus)">
                                                             @kurum.KaynakKurulus (@kurum.KayitSayisi kayıt)
                                                         </SelectItem>
                                                     }
                                                 </Select>
                                             </Field>
                                         </Column>
+
+                                        <!-- Fon Numarası -->
+                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-folder me-2"></i>Fon Numarası
+                                                </FieldLabel>
+                                                <Select TValue="string"
+                                                        @bind-SelectedValue="parametreler.SecilenFonNo"
+                                                        Class="form-control-modern"
+                                                        ValueChanged="OnFonNoChanged"
+                                                        Disabled="@(!fonlar.Any())">
+                                                    <SelectItem Value="@("")">Tüm Fonlar</SelectItem>
+                                                    @foreach (var fon in fonlar)
+                                                    {
+                                                        <SelectItem Value="@(fon.FonNo)">
+                                                            @fon.FonNo (@fon.KayitSayisi kayıt - ₺@fon.ToplamTutar.ToString("N0"))
+                                                        </SelectItem>
+                                                    }
+                                                </Select>
+                                                <FieldHelp>
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    @if (!fonlar.Any())
+                                                    {
+                                                        <span class="text-muted">Önce kaynak kuruluş seçin</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>@fonlar.Count fon mevcut</span>
+                                                    }
+                                                </FieldHelp>
+                                            </Field>
+                                        </Column>
+
+                                        <!-- İhraç Numarası -->
+                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-file-contract me-2"></i>İhraç Numarası
+                                                </FieldLabel>
+                                                <Select TValue="string"
+                                                        @bind-SelectedValue="parametreler.SecilenIhracNo"
+                                                        Class="form-control-modern"
+                                                        Disabled="@(!ihraclar.Any() || string.IsNullOrEmpty(parametreler.SecilenFonNo))">
+                                                    <SelectItem Value="@("")">Tüm İhraçlar</SelectItem>
+                                                    @foreach (var ihrac in ihraclar)
+                                                    {
+                                                        <SelectItem Value="@(ihrac.IhracNo)">
+                                                            @ihrac.IhracNo (@ihrac.KayitSayisi kayıt - ₺@ihrac.ToplamTutar.ToString("N0"))
+                                                        </SelectItem>
+                                                    }
+                                                </Select>
+                                                <FieldHelp>
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    @if (string.IsNullOrEmpty(parametreler.SecilenFonNo))
+                                                    {
+                                                        <span class="text-muted">Önce fon numarası seçin</span>
+                                                    }
+                                                    else if (!ihraclar.Any())
+                                                    {
+                                                        <span class="text-muted">Bu fon için ihraç bulunamadı</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>@ihraclar.Count ihraç mevcut</span>
+                                                    }
+                                                </FieldHelp>
+                                            </Field>
+                                        </Column>
+
+                                        <!-- Model Faiz Oranı -->
+                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
+                                            <Field>
+                                                <FieldLabel>
+                                                    <i class="fas fa-percentage me-2"></i>Model Faiz Oranı (%)
+                                                </FieldLabel>
+                                                <NumericPicker TValue="decimal"
+                                                               @bind-Value="parametreler.ModelFaizOrani"
+                                                               Step="0.01m"
+                                                               Min="0.01m"
+                                                               Max="1.0m"
+                                                               Class="form-control-modern"
+                                                               Placeholder="Örn: 0.45" />
+                                                <FieldHelp>
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    Model hesaplama için kullanılacak faiz oranı
+                                                </FieldHelp>
+                                                <ValidationMessage For="@(() => parametreler.ModelFaizOrani)" />
+                                            </Field>
+                                        </Column>
+
                                     </Row>
 
                                     <Row Class="g-4 mt-2">
+                                        <!-- Hesaplama Yöntemi -->
                                         <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
                                             <Field>
                                                 <FieldLabel>
-                                                    <i class="fas fa-calendar-alt me-2"></i>Başlangıç Tarihi
+                                                    <i class="fas fa-calculator me-2"></i>Hesaplama Yöntemi
                                                 </FieldLabel>
-                                                <div class="date-picker-modern">
-                                                    <DatePicker TValue="DateTime?"
-                                                                @bind-Date="parametreler.BaslangicTarihi"
-                                                                Placeholder="GG/AA/YYYY"
-                                                                DisplayFormat="dd/MM/yyyy"
-                                                                InputFormat="dd/MM/yyyy"
-                                                                Min="new DateTime(2000, 1, 1)"
-                                                                Max="new DateTime(2100, 12, 31)" />
-                                                </div>
+                                                <Select TValue="string"
+                                                        @bind-SelectedValue="parametreler.HesaplamaYontemi"
+                                                        DefaultValue="database"
+                                                        Class="form-control-modern">
+                                                    <SelectItem Value="@("database")">Veritabanı Formülü (Orijinal)</SelectItem>
+                                                    <SelectItem Value="@("simple")">Basit Faiz</SelectItem>
+                                                    <SelectItem Value="@("compound")">Bileşik Faiz</SelectItem>
+                                                </Select>
+                                                <FieldHelp>
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    Veritabanı formülü: ZBJ %45, diğerleri %48/mevcut oran
+                                                </FieldHelp>
                                             </Field>
                                         </Column>
+                                        <div class="mt-3">
+                                            <Button Color="Color.Warning" Clicked="@TestFonlar">
+                                                Test Fon Çekme
+                                            </Button>
+                                            <div class="mt-2">
+                                                <strong>Test Sonucu:</strong> @testSonuc
+                                            </div>
+                                        </div>
 
+                                        <div class="mt-3 p-3 border">
+                                            <h5>Basit Test</h5>
+                                            <Button Color="Color.Danger" Clicked="@(() => testSonuc = DateTime.Now.ToString())">
+                                                Basit Test
+                                            </Button>
+                                            <p><strong>Sonuç:</strong> @testSonuc</p>
+                                        </div>
+                                        <!-- Aktif Filtreler -->
                                         <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
-                                            <Field>
-                                                <FieldLabel>
-                                                    <i class="fas fa-calendar-check me-2"></i>Bitiş Tarihi
-                                                </FieldLabel>
-                                                <div class="date-picker-modern">
-                                                    <DatePicker TValue="DateTime?"
-                                                                @bind-Date="parametreler.BitisTarihi"
-                                                                Placeholder="GG/AA/YYYY"
-                                                                DisplayFormat="dd/MM/yyyy"
-                                                                InputFormat="dd/MM/yyyy"                                                                                                                             
-                                                                Min="new DateTime(2000, 1, 1)"
-                                                                Max="new DateTime(2100, 12, 31)" />
+                                            @if (!string.IsNullOrEmpty(parametreler.SecilenFonNo) || !string.IsNullOrEmpty(parametreler.SecilenIhracNo))
+                                            {
+                                                <div class="selected-filters">
+                                                    <FieldLabel>
+                                                        <i class="fas fa-filter me-2"></i>Aktif Filtreler
+                                                    </FieldLabel>
+                                                    <div class="mt-2">
+                                                        @if (!string.IsNullOrEmpty(parametreler.SecilenFonNo))
+                                                        {
+                                                            <Badge Color="Color.Primary" Class="me-2">Fon: @parametreler.SecilenFonNo</Badge>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(parametreler.SecilenIhracNo))
+                                                        {
+                                                            <Badge Color="Color.Success" Class="me-2">İhraç: @parametreler.SecilenIhracNo</Badge>
+                                                        }
+                                                    </div>
                                                 </div>
-                                            </Field>
+                                            }
                                         </Column>
                                     </Row>
-
-                                    <Field Class="mt-4">
-                                        <FieldLabel>
-                                            <i class="fas fa-university me-2"></i>Bankalar (Çoklu Seçim)
-                                        </FieldLabel>
-                                        <Select TValue="string"
-                                                @bind-SelectedValues="selectedBankalar"
-                                                Multiple
-                                                Class="form-control-modern">
-                                            @foreach (var banka in bankalar)
+                                    <div class="text-center mt-4">
+                                        <button type="submit"
+                                                class="btn btn-primary me-3"
+                                                @onclick="@HandleValidSubmit"
+                                                disabled="@isLoading">
+                                            @if (isLoading)
                                             {
-                                                <SelectItem Value="banka.BankaAdi">
-                                                    @banka.BankaAdi (@banka.KayitSayisi kayıt)
-                                                </SelectItem>
+                                                <span class="spinner-border spinner-border-sm me-2"></span>
                                             }
-                                        </Select>
-                                        <FieldHelp>
-                                            <i class="fas fa-info-circle me-2"></i>
-                                            Boş bırakırsanız tüm bankalar dahil edilir
-                                        </FieldHelp>
-                                    </Field>
+                                            else
+                                            {
+                                                <i class="fas fa-search me-2"></i>
+                                            }
+                                            Analizi Çalıştır
+                                        </button>
+
+                                        <button type="button"
+                                                class="btn btn-outline-secondary"
+                                                @onclick="@ResetParameters">
+                                            <i class="fas fa-undo me-2"></i>
+                                            Sıfırla
+                                        </button>
+                                    </div>
 
                                     <div class="text-center mt-4">
                                         <Buttons Class="gap-3">
@@ -161,7 +265,7 @@
                                                 Analizi Çalıştır
                                             </Button>
                                             <Button Color="Color.Secondary"
-                                                    Clicked="ResetParameters"
+                                                    Clicked="@ResetParameters"
                                                     Outline
                                                     Class="btn-modern">
                                                 <i class="fas fa-undo me-2"></i>
@@ -179,8 +283,9 @@
                                         <h4>Hızlı Analiz</h4>
                                         <p class="text-muted">
                                             Varsayılan parametrelerle hızlı görünüm:<br>
-                                            <Badge Color="Color.Primary">Faiz Oranı: 45%</Badge>
+                                            <Badge Color="Color.Primary">Model Faiz: 45%</Badge>
                                             <Badge Color="Color.Info" Class="ms-2">Kaynak Kuruluş: FİBABANKA</Badge>
+                                            <Badge Color="Color.Success" Class="ms-2">Veritabanı Formülü</Badge>
                                         </p>
                                     </div>
                                     <Button Color="Color.Info"
@@ -209,6 +314,38 @@
     <!-- Results Section -->
     @if (sonuc != null)
     {
+        <!-- Parameter Summary -->
+        <Row Class="mt-4">
+            <Column ColumnSize="ColumnSize.Is12">
+                <div class="parameter-summary">
+                    <h6><i class="fas fa-info-circle me-2"></i>Analiz Parametreleri</h6>
+                    <div class="parameter-tags">
+                        <span class="parameter-tag">
+                            <strong>Model Faiz:</strong> %@((parametreler.ModelFaizOrani * 100).ToString("F2"))
+                        </span>
+                        <span class="parameter-tag">
+                            <strong>Kuruluş:</strong> @parametreler.KaynakKurulus
+                        </span>
+                        @if (!string.IsNullOrEmpty(parametreler.SecilenFonNo))
+                        {
+                            <span class="parameter-tag">
+                                <strong>Fon:</strong> @parametreler.SecilenFonNo
+                            </span>
+                        }
+                        @if (!string.IsNullOrEmpty(parametreler.SecilenIhracNo))
+                        {
+                            <span class="parameter-tag">
+                                <strong>İhraç:</strong> @parametreler.SecilenIhracNo
+                            </span>
+                        }
+                        <span class="parameter-tag">
+                            <strong>Yöntem:</strong> @GetHesaplamaYontemiText()
+                        </span>
+                    </div>
+                </div>
+            </Column>
+        </Row>
+
         <!-- Metrics Cards -->
         <Row Class="g-4 mt-4">
             <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
@@ -334,12 +471,47 @@
     }
 </Container>
 
+<style>
+    .parameter-summary {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem;
+        border-left: 4px solid #007bff;
+    }
+
+    .parameter-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .parameter-tag {
+        background: #e9ecef;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        color: #495057;
+    }
+
+    .selected-filters {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+    }
+</style>
+
 @code {
     private NakitAkisParametre parametreler = new();
     private NakitAkisSonuc? sonuc;
-    private List<BankaBilgi> bankalar = new();
+    // private List<BankaBilgi> bankalar = new();
     private List<KaynakKurulusBilgi> kaynakKuruluslar = new();
-    private IReadOnlyList<string> selectedBankalar = new List<string>();
+    // private IReadOnlyList<string> selectedBankalar = new List<string>();
+
+    // Yeni cascading dropdown değişkenleri
+    private List<FonBilgi> fonlar = new();
+    private List<IhracBilgi> ihraclar = new();
 
     private bool isLoading = false;
     private bool isLoadingDefault = false;
@@ -355,8 +527,18 @@
 
         if (connectionOk)
         {
-            bankalar = await NakitAkisService.GetBankalarAsync();
+            // bankalar = await NakitAkisService.GetBankalarAsync();
             kaynakKuruluslar = await NakitAkisService.GetKaynakKuruluslarAsync();
+            Console.WriteLine($"Kuruluş sayısı: {kaynakKuruluslar.Count}");
+
+            // İlk kaynak kuruluş için fonları yükle
+            // if (kaynakKuruluslar.Any() && !string.IsNullOrEmpty(parametreler.KaynakKurulus))
+            // {
+            //     fonlar = await NakitAkisService.GetFonlarAsync(parametreler.KaynakKurulus);
+            // }
+
+            fonlar.Clear();
+            ihraclar.Clear();
         }
     }
 
@@ -368,12 +550,65 @@
         }
     }
 
+    // Cascading dropdown event handlers
+    private async Task OnKaynakKurulusChanged(string kaynakKurulus)
+    {
+        Console.WriteLine($"Kaynak kuruluş değişti: {kaynakKurulus}");
+
+        parametreler.KaynakKurulus = kaynakKurulus;
+        parametreler.SecilenFonNo = null;
+        parametreler.SecilenIhracNo = null;
+
+        ihraclar.Clear();
+        fonlar.Clear();
+
+        if (!string.IsNullOrEmpty(kaynakKurulus))
+        {
+            try
+            {
+                fonlar = await NakitAkisService.GetFonlarAsync(kaynakKurulus);
+                Console.WriteLine($"Fon sayısı: {fonlar.Count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Fon yükleme hatası: {ex.Message}");
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnFonNoChanged(string fonNo)
+    {
+        Console.WriteLine($"Fon numarası değişti: {fonNo}");
+
+        parametreler.SecilenFonNo = fonNo;
+        parametreler.SecilenIhracNo = null;
+
+        ihraclar.Clear();
+
+        if (!string.IsNullOrEmpty(fonNo) && !string.IsNullOrEmpty(parametreler.KaynakKurulus))
+        {
+            try
+            {
+                ihraclar = await NakitAkisService.GetIhraclarAsync(parametreler.KaynakKurulus, fonNo);
+                Console.WriteLine($"İhraç sayısı: {ihraclar.Count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"İhraç yükleme hatası: {ex.Message}");
+            }
+        }
+
+        StateHasChanged();
+    }
+
     private async Task HandleValidSubmit()
     {
         isLoading = true;
         try
         {
-            parametreler.SecilenBankalar = selectedBankalar.ToList();
+            // parametreler.SecilenBankalar = selectedBankalar.ToList();
             sonuc = await NakitAkisService.GetNakitAkisAnaliziAsync(parametreler);
             await UpdateCharts();
         }
@@ -386,7 +621,12 @@
             isLoading = false;
         }
     }
-
+    private async Task OnIhracNoChanged(string ihracNo)
+    {
+        Console.WriteLine($"İhraç numarası değişti: {ihracNo}");
+        parametreler.SecilenIhracNo = ihracNo;
+        StateHasChanged();
+    }
     private async Task LoadDefaultView()
     {
         isLoadingDefault = true;
@@ -394,8 +634,9 @@
         {
             var defaultParams = new NakitAkisParametre
             {
-                FaizOrani = 0.45m,
-                KaynakKurulus = "FİBABANKA"
+                ModelFaizOrani = 0.45m,
+                KaynakKurulus = "FİBABANKA",
+                HesaplamaYontemi = "database"
             };
 
             sonuc = await NakitAkisService.GetNakitAkisAnaliziAsync(defaultParams);
@@ -414,8 +655,12 @@
     private void ResetParameters()
     {
         parametreler = new NakitAkisParametre();
-        selectedBankalar = new List<string>();
+        // selectedBankalar = new List<string>();
+        fonlar.Clear();
+        ihraclar.Clear();
         sonuc = null;
+        Console.WriteLine("Reset completed!");
+        StateHasChanged();
     }
 
     private async Task SetActiveChartTab(string tabName)
@@ -481,11 +726,12 @@
             {
                 Parametreler = new
                 {
-                    parametreler.FaizOrani,
+                    parametreler.ModelFaizOrani,
                     parametreler.KaynakKurulus,
-                    parametreler.SecilenBankalar,
-                    parametreler.BaslangicTarihi,
-                    parametreler.BitisTarihi
+                    parametreler.SecilenFonNo,
+                    parametreler.SecilenIhracNo,
+                    // parametreler.SecilenBankalar,
+                    parametreler.HesaplamaYontemi
                 }
             };
 
@@ -494,7 +740,6 @@
 
             if (format == "html")
             {
-                // HTML'i yeni sekmede aç
                 var response = await HttpClient.PostAsync($"/api/export/{format}", content);
                 if (response.IsSuccessStatusCode)
                 {
@@ -504,7 +749,6 @@
             }
             else
             {
-                // Dosya indirme
                 await JSRuntime.InvokeVoidAsync("downloadFile", $"/api/export/{format}", json);
             }
         }
@@ -517,5 +761,27 @@
             isExporting = false;
             exportType = "";
         }
+    }
+    private string testSonuc = "";
+
+    private async Task TestFonlar()
+    {
+        testSonuc = "Butona basıldı!";
+        StateHasChanged();
+
+        await Task.Delay(1000);
+
+        testSonuc = "1 saniye geçti!";
+        StateHasChanged();
+    }
+    private string GetHesaplamaYontemiText()
+    {
+        return (parametreler.HesaplamaYontemi ?? "database") switch
+        {
+            "database" => "Veritabanı Formülü",
+            "simple" => "Basit Faiz",
+            "compound" => "Bileşik Faiz",
+            _ => "Bilinmiyor"
+        };
     }
 }

@@ -17,20 +17,7 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents(); // .NET 8 Blazor
-
-// Database Services
-builder.Services.AddScoped<INakitAkisService, NakitAkisService>();
-
-// Export Service - YENİ SERVİS
-builder.Services.AddScoped<IExportService, ExportService>();
-
-// HttpClient for API calls
-builder.Services.AddHttpClient();
-
-// Blazorise Configuration
+// BLAZORISE ÖNCE EKLENMELİ - SIRAYI DEĞİŞTİRİN
 builder.Services
     .AddBlazorise(options =>
     {
@@ -39,11 +26,22 @@ builder.Services
     .AddBootstrap5Providers()
     .AddFontAwesomeIcons();
 
+// SONRA RAZOR COMPONENTS
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+// Database Services
+builder.Services.AddScoped<INakitAkisService, NakitAkisService>();
+builder.Services.AddScoped<IExportService, ExportService>();
+
+// HttpClient for API calls
+builder.Services.AddHttpClient();
+
 // Health Checks
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!);
 
-// Hangfire Configuration - FIXED
+// Hangfire Configuration
 builder.Services.AddHangfire(configuration => configuration
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -55,7 +53,7 @@ builder.Services.AddHangfire(configuration => configuration
 
 builder.Services.AddHangfireServer();
 
-// Controllers for API (Grafana + Export)
+// Controllers for API
 builder.Services.AddControllers()
     .AddNewtonsoftJson();
 
@@ -90,9 +88,9 @@ else
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseAntiforgery(); // .NET 8 requirement
+app.UseAntiforgery();
 
-// CORS (Grafana için gerekli olabilir)
+// CORS
 app.UseCors(policy =>
 {
     policy.AllowAnyOrigin()
@@ -100,7 +98,7 @@ app.UseCors(policy =>
           .AllowAnyHeader();
 });
 
-// .NET 8 Blazor Routing - FIXED
+// Blazor Routing
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
@@ -118,13 +116,10 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 
 app.Run();
 
-// Hangfire Authorization Filter
 public class HangfireAuthorizationFilter : IDashboardAuthorizationFilter
 {
     public bool Authorize(DashboardContext context)
     {
-        // Geliştirme ortamında herkesin erişimine izin ver
-        // Prodüksiyonda authentication ekle
         return true;
     }
 }

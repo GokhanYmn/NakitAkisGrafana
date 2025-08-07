@@ -30,9 +30,12 @@ namespace NakitAkis.Services
                 var result = await connection.QueryFirstOrDefaultAsync<dynamic>(sql, new
                 {
                     FaizOrani = parametre.FaizOrani,
+                    ModelFaizOrani=parametre.ModelFaizOrani,
                     KaynakKurulus = parametre.KaynakKurulus,
                     BaslangicTarihi = parametre.BaslangicTarihi,
-                    BitisTarihi = parametre.BitisTarihi
+                    BitisTarihi = parametre.BitisTarihi,
+                    SecilenFonNo = parametre.SecilenFonNo,
+                    SecilenIhracNo = parametre.SecilenIhracNo
                 });
 
                 // Güvenli decimal dönüştürme
@@ -77,6 +80,85 @@ namespace NakitAkis.Services
             }
 
         }
+
+        private string BuildDatabaseQuery(NakitAkisParametre parametre)
+        {
+            var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
+            var tarihFilter = BuildTarihFilter();
+
+            return $@"
+        SELECT 
+            SUM(faiz_tutari) as sum,
+            SUM(model_faiz_tutari) as sum1
+        FROM (
+            SELECT *,
+                   donus_tarihi - baslangic_tarihi as vade,
+                   (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00/(donus_tarihi - baslangic_tarihi)) - 1 as bilesik_faiz,
+                   mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari as model_faiz_tutari                  
+            FROM (      
+                SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                       baslangic_tarihi, mevduat_tutari, @ModelFaizOrani as faiz_orani, donus_tarihi,
+                       mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 as faiz_tutari,
+                       mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 + toplam_donus as toplam_donus,
+                       (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik  
+                FROM nakit_akis na 
+                WHERE banka_adi LIKE '%ZBJ%' 
+                  {tarihFilter}
+                  {bankaFilter}
+                
+                UNION
+                
+                SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                       baslangic_tarihi, mevduat_tutari,
+                       CASE WHEN faiz_tutari = 0 THEN 0.48 ELSE faiz_orani END as faiz_orani,
+                       donus_tarihi,
+                       CASE WHEN faiz_tutari = 0 THEN mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
+                            ELSE faiz_tutari END as faiz_tutari,
+                       CASE WHEN faiz_tutari = 0 THEN mevduat_tutari + mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
+                            ELSE toplam_donus END as toplam_donus,
+                       (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik       
+                FROM nakit_akis na 
+                WHERE banka_adi NOT LIKE '%ZBJ%' 
+                  AND toplam_donus > 0
+                  {tarihFilter}
+                  {bankaFilter}
+            ) K            
+            WHERE toplam_donus > 0
+              AND kaynak_kurulus = @KaynakKurulus
+        ) K";
+        }
+
+        private string BuildSimpleFaizQuery(NakitAkisParametre parametre)
+        {
+            var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
+            var tarihFilter = BuildTarihFilter();
+
+            return $@"
+        SELECT 
+            SUM(mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.0) as sum,
+            SUM(mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.0) as sum1
+        FROM nakit_akis 
+        WHERE kaynak_kurulus = @KaynakKurulus
+          AND toplam_donus > 0
+          {tarihFilter}
+          {bankaFilter}";
+        }
+
+        private string BuildCompoundFaizQuery(NakitAkisParametre parametre)
+        {
+            var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
+            var tarihFilter = BuildTarihFilter();
+
+            return $@"
+        SELECT 
+            SUM(mevduat_tutari * (1 + @ModelFaizOrani / 365.0)^(donus_tarihi - baslangic_tarihi) - mevduat_tutari) as sum,
+            SUM(mevduat_tutari * (1 + @ModelFaizOrani / 365.0)^(donus_tarihi - baslangic_tarihi) - mevduat_tutari) as sum1
+        FROM nakit_akis 
+        WHERE kaynak_kurulus = @KaynakKurulus
+          AND toplam_donus > 0
+          {tarihFilter}
+          {bankaFilter}";
+        }
         public async Task<List<NakitAkisHistoricalData>> GetHistoricalDataAsync(NakitAkisParametre parametre, DateTime fromDate, DateTime toDate)
         {
             try
@@ -91,31 +173,60 @@ namespace NakitAkis.Services
 
                 // GERÇEK HESAPLAMA İLE SORGU
                 var sql = $@"
+            WITH daily_data AS (
+                SELECT 
+                    DATE(baslangic_tarihi) as gun,
+                    SUM(faiz_tutari)::decimal as toplam_faiz,
+                    SUM(model_faiz_tutari)::decimal as toplam_model_faiz
+                FROM (
+                    SELECT *,
+                           donus_tarihi - baslangic_tarihi as vade,
+                           (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00 / (donus_tarihi - baslangic_tarihi)) - 1 as bilesik_faiz,
+                           mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari as model_faiz_tutari                  
+                    FROM (      
+                        SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                               baslangic_tarihi, mevduat_tutari, @ModelFaizOrani as faiz_orani, donus_tarihi,
+                               mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 as faiz_tutari,
+                               mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 + toplam_donus as toplam_donus,
+                               (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik  
+                        FROM nakit_akis na 
+                        WHERE banka_adi LIKE '%ZBJ%' 
+                          AND baslangic_tarihi >= @FromDate
+                          AND baslangic_tarihi <= @ToDate
+                        
+                        UNION
+                        
+                        SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                               baslangic_tarihi, mevduat_tutari,
+                               CASE WHEN faiz_tutari = 0 THEN 0.48 ELSE faiz_orani END as faiz_orani,
+                               donus_tarihi,
+                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
+                                    ELSE faiz_tutari END as faiz_tutari,
+                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari + mevduat_tutari * 0.48 * (donus_tarihi - baslangic_tarihi) / 365.00 
+                                    ELSE toplam_donus END as toplam_donus,
+                               (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik       
+                        FROM nakit_akis na 
+                        WHERE banka_adi NOT LIKE '%ZBJ%' 
+                          AND toplam_donus > 0
+                          AND baslangic_tarihi >= @FromDate
+                          AND baslangic_tarihi <= @ToDate
+                    ) K            
+                    WHERE toplam_donus > 0
+                      AND kaynak_kurulus = @KaynakKurulus
+                ) K
+                GROUP BY DATE(baslangic_tarihi)
+            )
             SELECT 
-                baslangic_tarihi::date as Tarih,
-                SUM(
-                    CASE 
-                        WHEN faiz_tutari IS NOT NULL AND faiz_tutari > 0 
-                        THEN faiz_tutari
-                        ELSE mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.0
-                    END
-                ) as ToplamFaizTutari,
-                SUM(
-                    mevduat_tutari * (1 + @FaizOrani / 365.0)^(donus_tarihi - baslangic_tarihi) - mevduat_tutari
-                ) as ToplamModelFaizTutari
-            FROM nakit_akis 
-            WHERE kaynak_kurulus = @KaynakKurulus
-              AND baslangic_tarihi >= @FromDate 
-              AND baslangic_tarihi <= @ToDate
-              AND toplam_donus > 0
-              {bankaFilter}
-            GROUP BY baslangic_tarihi::date
-            ORDER BY Tarih
-            LIMIT 100";
+                gun as Tarih,
+                COALESCE(toplam_faiz, 0) as ToplamFaizTutari,
+                COALESCE(toplam_model_faiz, 0) as ToplamModelFaizTutari
+            FROM daily_data
+            ORDER BY gun";
 
                 var result = await connection.QueryAsync<NakitAkisHistoricalData>(sql, new
                 {
                     FaizOrani = parametre.FaizOrani,
+                    ModelFaizOrani = parametre.ModelFaizOrani,
                     KaynakKurulus = parametre.KaynakKurulus,
                     FromDate = fromDate,
                     ToDate = toDate
@@ -137,48 +248,70 @@ namespace NakitAkis.Services
         {
             var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
             var tarihFilter = BuildTarihFilter();
-
+            var fonFilter = BuildFonFilter(parametre.SecilenFonNo);
+            var ihracFilter = BuildIhracFilter(parametre.SecilenIhracNo);
             return $@"
                 SELECT 
-                    SUM(faiz_tutari) as sum,
-                    SUM(model_faiz_tutari) as sum1
-                FROM (
-                    SELECT *,
-                           donus_tarihi - baslangic_tarihi as vade,
-                           (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00/(donus_tarihi - baslangic_tarihi)) - 1 as bilesik_faiz,
-                           mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari as model_faiz_tutari                  
-                    FROM (      
-                        SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
-                               baslangic_tarihi, mevduat_tutari, @FaizOrani as faiz_orani, donus_tarihi,
-                               mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 as faiz_tutari,
-                               mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 + toplam_donus as toplam_donus,
-                               (1 + 0.45 / 365.00)^365.00 - 1 as model_bilesik  
-                        FROM nakit_akis na 
-                        WHERE banka_adi LIKE '%ZBJ%' 
-                          {tarihFilter}
-                          {bankaFilter}
-                        
-                        UNION
-                        
-                        SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
-                               baslangic_tarihi, mevduat_tutari,
-                               CASE WHEN faiz_tutari = 0 THEN @FaizOrani ELSE faiz_orani END as faiz_orani,
-                               donus_tarihi,
-                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 
-                                    ELSE faiz_tutari END as faiz_tutari,
-                               CASE WHEN faiz_tutari = 0 THEN mevduat_tutari + mevduat_tutari * @FaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 
-                                    ELSE toplam_donus END as toplam_donus,
-                               (1 + 0.45 / 365.00)^365.00 - 1 as model_bilesik       
-                        FROM nakit_akis na 
-                        WHERE banka_adi NOT LIKE '%ZBJ%' 
-                          AND toplam_donus > 0
-                          {tarihFilter}
-                          {bankaFilter}
-                    ) K            
-                    WHERE toplam_donus > 0
-                      AND kaynak_kurulus = @KaynakKurulus
-                ) K";
+            SUM(faiz_tutari) as sum,
+            SUM(model_faiz_tutari) as sum1
+        FROM (
+            SELECT *,
+                   donus_tarihi - baslangic_tarihi as vade,
+                   (1 + faiz_orani * (donus_tarihi - baslangic_tarihi) / 365.00)^(365.00/(donus_tarihi - baslangic_tarihi)) - 1 as bilesik_faiz,
+                   mevduat_tutari * (1 + model_bilesik)^((donus_tarihi - baslangic_tarihi) / 365.00) - mevduat_tutari as model_faiz_tutari                  
+            FROM (      
+                SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                       baslangic_tarihi, mevduat_tutari, @ModelFaizOrani as faiz_orani, donus_tarihi,
+                       mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 as faiz_tutari,
+                       mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 + toplam_donus as toplam_donus,
+                       (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik  
+                FROM nakit_akis na 
+                WHERE banka_adi LIKE '%ZBJ%' 
+                  {tarihFilter}
+                  {bankaFilter}
+                  {fonFilter}
+                  {ihracFilter}
+                
+                UNION
+                
+                SELECT id, kaynak_kurulus, fon_no, ihrac_no, vdmk_isin_kodu, banka_adi,
+                       baslangic_tarihi, mevduat_tutari,
+                       CASE WHEN faiz_tutari = 0 THEN @ModelFaizOrani ELSE faiz_orani END as faiz_orani,
+                       donus_tarihi,
+                       CASE WHEN faiz_tutari = 0 THEN mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 
+                            ELSE faiz_tutari END as faiz_tutari,
+                       CASE WHEN faiz_tutari = 0 THEN mevduat_tutari + mevduat_tutari * @ModelFaizOrani * (donus_tarihi - baslangic_tarihi) / 365.00 
+                            ELSE toplam_donus END as toplam_donus,
+                       (1 + @ModelFaizOrani / 365.00)^365.00 - 1 as model_bilesik       
+                FROM nakit_akis na 
+                WHERE banka_adi NOT LIKE '%ZBJ%' 
+                  AND toplam_donus > 0
+                  {tarihFilter}
+                  {bankaFilter}
+                  {fonFilter}
+                  {ihracFilter}
+            ) K            
+            WHERE toplam_donus > 0
+              AND kaynak_kurulus = @KaynakKurulus
+        ) K";
         }
+
+        private string BuildFonFilter(string? secilenFonNo)
+        {
+            if (string.IsNullOrEmpty(secilenFonNo))
+                return string.Empty;
+
+            return " AND fon_no = @SecilenFonNo";
+        }
+
+        private string BuildIhracFilter(string? secilenIhracNo)
+        {
+            if (string.IsNullOrEmpty(secilenIhracNo))
+                return string.Empty;
+
+            return " AND ihrac_no = @SecilenIhracNo";
+        }
+
 
         private string BuildBankaFilter(List<string> secilenBankalar)
         {
@@ -264,6 +397,65 @@ namespace NakitAkis.Services
             {
                 _logger.LogError(ex, "Database connection test failed");
                 return false;
+            }
+        }
+
+        public async Task<List<FonBilgi>> GetFonlarAsync(string kaynakKurulus)
+        {
+            try
+            {
+                using var connection = new NpgsqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                var sql = @"
+            SELECT DISTINCT 
+                fon_no as FonNo, 
+                COUNT(*) as KayitSayisi,
+                SUM(COALESCE(mevduat_tutari, 0)) as ToplamTutar
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus
+              AND fon_no IS NOT NULL 
+              AND fon_no != ''
+            GROUP BY fon_no
+            ORDER BY fon_no";
+
+                var result = await connection.QueryAsync<FonBilgi>(sql, new { KaynakKurulus = kaynakKurulus });
+                return result.ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting fonlar for {kurulus}", kaynakKurulus);
+                return new List<FonBilgi>();
+            }
+        }
+
+        public async Task<List<IhracBilgi>> GetIhraclarAsync(string kaynakKurulus, string fonNo)
+        {
+            try
+            {
+                using var connection = new NpgsqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                var sql = @"
+            SELECT DISTINCT 
+                ihrac_no as IhracNo, 
+                COUNT(*) as KayitSayisi,
+                SUM(COALESCE(mevduat_tutari, 0)) as ToplamTutar
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus
+              AND fon_no = @FonNo
+              AND ihrac_no IS NOT NULL 
+              AND ihrac_no != ''
+            GROUP BY ihrac_no
+            ORDER BY ihrac_no";
+
+                var result = await connection.QueryAsync<IhracBilgi>(sql, new { KaynakKurulus = kaynakKurulus, FonNo = fonNo });
+                return result.ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting ihraclar for {kurulus}-{fon}", kaynakKurulus, fonNo);
+                return new List<IhracBilgi>();
             }
         }
     }
