@@ -49,7 +49,7 @@
                                 <EditForm Model="parametreler" OnValidSubmit="HandleValidSubmit">
                                     <DataAnnotationsValidator />
 
-                                    <Row Class="g-4">
+                                    <Row Class="g-3">
 
 
                                         <!-- Kaynak Kuruluş -->
@@ -140,31 +140,8 @@
                                                     }
                                                 </FieldHelp>
                                             </Field>
-                                        </Column>
-
-                                        <!-- Model Faiz Oranı -->
-                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is6.OnTablet.Is12.OnMobile">
-                                            <Field>
-                                                <FieldLabel>
-                                                    <i class="fas fa-percentage me-2"></i>Model Faiz Oranı (%)
-                                                </FieldLabel>
-                                                <NumericPicker TValue="decimal"
-                                                               @bind-Value="parametreler.ModelFaizOrani"
-                                                               Step="0.01m"
-                                                               Min="0.01m"
-                                                               Max="1.0m"
-                                                               Class="form-control-modern"
-                                                               Placeholder="Örn: 0.45" />
-                                                <FieldHelp>
-                                                    <i class="fas fa-info-circle me-2"></i>
-                                                    Model hesaplama için kullanılacak faiz oranı
-                                                </FieldHelp>
-                                                <ValidationMessage For="@(() => parametreler.ModelFaizOrani)" />
-                                            </Field>
-                                        </Column>
-
+                                        </Column>                                                                        
                                     </Row>
-
                                     <Row Class="g-4 mt-2">
                                         <!-- Hesaplama Yöntemi -->
                                         <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile">
@@ -508,8 +485,6 @@
     // private List<BankaBilgi> bankalar = new();
     private List<KaynakKurulusBilgi> kaynakKuruluslar = new();
     // private IReadOnlyList<string> selectedBankalar = new List<string>();
-
-    // Yeni cascading dropdown değişkenleri
     private List<FonBilgi> fonlar = new();
     private List<IhracBilgi> ihraclar = new();
 

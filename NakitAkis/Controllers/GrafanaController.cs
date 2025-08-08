@@ -48,11 +48,11 @@ namespace NakitAkis.Controllers
         }
 
         // Grafana Query Endpoint - Ana veri kaynağı
-        [HttpGet("query")]  
+        [HttpGet("query")]
         [HttpPost("query")]
-        public async Task<IActionResult> Query([FromBody] object requestData = null, 
-                                      [FromQuery] string kaynak_kurulus = null, 
-                                      [FromQuery] string fm_fonlar = null)      
+        public async Task<IActionResult> Query([FromBody] object requestData = null,
+                                      [FromQuery] string kaynak_kurulus = null,
+                                      [FromQuery] string fm_fonlar = null)
         {
             try
             {
@@ -483,7 +483,9 @@ namespace NakitAkis.Controllers
         public async Task<IActionResult> Variable([FromBody] GrafanaVariableRequest request = null,
                                          [FromQuery] string variable = null,
                                          [FromQuery] string kaynak_kurulus = null,
-                                         [FromQuery] string fm_fonlar = null)
+                                         [FromQuery] string fm_fonlar = null,
+                                         [FromQuery] string ihrac_no = null
+            )
         {
             try
             {
@@ -491,6 +493,8 @@ namespace NakitAkis.Controllers
                 _logger.LogInformation("Variable: {variable}", variable);
                 _logger.LogInformation("Kaynak Kurulus: {kurulus}", kaynak_kurulus);
                 _logger.LogInformation("FM Fonlar: {fonlar}", fm_fonlar);
+                _logger.LogInformation("Ihrac No: {ihrac}", ihrac_no);
+                _logger.LogInformation("Request method: {method}", HttpContext.Request.Method);
 
                 var variableName = request?.Variable ?? variable;
 
@@ -518,7 +522,8 @@ namespace NakitAkis.Controllers
 
                         if (fonlar.Any())
                         {
-                            var result = fonlar.Select(f => new {
+                            var result = fonlar.Select(f => new
+                            {
                                 text = $"{f.FonNo} (₺{f.ToplamTutar:N0})",
                                 value = f.FonNo
                             }).ToList();
@@ -530,6 +535,37 @@ namespace NakitAkis.Controllers
                         {
                             _logger.LogWarning("No fonlar found for kurulus: {kurulus}", kurulus);
                             return Ok(new[] { new { text = "Fon bulunamadı", value = "" } });
+                        }
+                    case "ihrac_no":
+                        var kurulusIhrac = kaynak_kurulus ?? "FİBABANKA";
+                        var fonNoIhrac = fm_fonlar;
+
+                        _logger.LogInformation("Getting ihraclar for kurulus: '{kurulus}', fon: '{fon}'", kurulusIhrac, fonNoIhrac);
+
+                        try
+                        {
+                            var ihraclar = await _nakitAkisService.GetIhraclarAsync(kurulusIhrac, fonNoIhrac);
+                            _logger.LogInformation("Found {count} ihraclar for fon: {fon}", ihraclar.Count, fonNoIhrac);
+
+                            if (ihraclar.Any())
+                            {
+                                var ihracResult = ihraclar.Select(i => new
+                                {
+                                    text = $"{i.IhracNo} (₺{i.ToplamTutar:N0})",
+                                    value = i.IhracNo
+                                }).ToList();
+
+                                return Ok(ihracResult);
+                            }
+                            else
+                            {
+                                return Ok(new[] { new { text = "İhraç bulunamadı", value = "" } });
+                            }
+                        }
+                        catch (Exception ihracEx)
+                        {
+                            _logger.LogError(ihracEx, "Error getting ihraclar");
+                            return Ok(new[] { new { text = "İhraç yüklenirken hata", value = "" } });
                         }
 
                     default:
