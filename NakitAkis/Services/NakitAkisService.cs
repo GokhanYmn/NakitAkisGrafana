@@ -168,7 +168,7 @@ namespace NakitAkis.Services
 
                 using var connection = new NpgsqlConnection(_connectionString);
                 await connection.OpenAsync();
-               
+
                 var bankaFilter = BuildBankaFilter(parametre.SecilenBankalar);
                 var fonFilter = BuildFonFilter(parametre.SecilenFonNo);
                 var ihracFilter = BuildIhracFilter(parametre.SecilenIhracNo);
@@ -255,7 +255,7 @@ namespace NakitAkis.Services
                     KaynakKurulus = parametre.KaynakKurulus,
                     FromDate = fromDate,
                     ToDate = toDate,
-                    SecilenFonNo = parametre.SecilenFonNo,     
+                    SecilenFonNo = parametre.SecilenFonNo,
                     SecilenIhracNo = parametre.SecilenIhracNo
                 });
 
@@ -494,28 +494,60 @@ namespace NakitAkis.Services
                 using var connection = new NpgsqlConnection(_connectionString);
                 await connection.OpenAsync();
 
+                Console.WriteLine("=== REAL TUTAR CALCULATION ===");
+                Console.WriteLine($"Kurulus: {kaynakKurulus}, Fon: {fonNo}");
+
                 var sql = @"
-            SELECT DISTINCT 
-                ihrac_no as IhracNo, 
-                COUNT(*) as KayitSayisi,
-                SUM(COALESCE(mevduat_tutari, 0)) as ToplamTutar
+            SELECT 
+                ihrac_no,
+                COUNT(*) as kayit_sayisi,
+                SUM(mevduat_tutari) as toplam_tutar,
+                AVG(mevduat_tutari) as ortalama_tutar
             FROM nakit_akis 
             WHERE kaynak_kurulus = @KaynakKurulus
-              AND fon_no = @FonNo
+              AND fon_no::text = @FonNo
               AND ihrac_no IS NOT NULL 
-              AND ihrac_no != ''
+              AND mevduat_tutari IS NOT NULL
+              AND mevduat_tutari > 0
             GROUP BY ihrac_no
-            ORDER BY ihrac_no";
+            ORDER BY ihrac_no
+            LIMIT 10";
 
-                var result = await connection.QueryAsync<IhracBilgi>(sql, new { KaynakKurulus = kaynakKurulus, FonNo = fonNo });
-                return result.ToList();
+                var result = await connection.QueryAsync<dynamic>(sql, new
+                {
+                    KaynakKurulus = kaynakKurulus,
+                    FonNo = fonNo
+                });
+
+                Console.WriteLine($"Query result count: {result.Count()}");
+
+                var ihracList = new List<IhracBilgi>();
+                foreach (var r in result)
+                {
+                    var ihracNo = r.ihrac_no?.ToString() ?? "NULL_VALUE";
+                    var kayit = Convert.ToInt32(r.kayit_sayisi ?? 0);
+                    var toplamTutar = Convert.ToDecimal(r.toplam_tutar ?? 0);
+
+                    Console.WriteLine($"Real: ihrac='{ihracNo}', kayit={kayit}, tutar={toplamTutar}");
+
+                    ihracList.Add(new IhracBilgi
+                    {
+                        IhracNo = ihracNo,
+                        ToplamTutar = toplamTutar,
+                        KayitSayisi = kayit
+                    });
+                }
+
+                Console.WriteLine("=== REAL CALCULATION END ===");
+                return ihracList;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting ihraclar for {kurulus}-{fon}", kaynakKurulus, fonNo);
+                Console.WriteLine($"ERROR: {ex.Message}");
                 return new List<IhracBilgi>();
             }
         }
     }
 }
+
 

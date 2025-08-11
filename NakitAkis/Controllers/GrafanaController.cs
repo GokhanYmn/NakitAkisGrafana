@@ -225,6 +225,7 @@ namespace NakitAkis.Controllers
         [HttpPost("trends")]
         public async Task<IActionResult> GetTrends([FromQuery] string kaynak_kurulus = "FİBABANKA",
                                    [FromQuery] string fm_fonlar = null,
+                                   [FromQuery] string ihrac_no = null,
                                    [FromQuery] string period = "week")
         {
             try
@@ -239,7 +240,8 @@ namespace NakitAkis.Controllers
 
                 var fonFilter = string.IsNullOrEmpty(fm_fonlar) || fm_fonlar == "All" || fm_fonlar == "$__all" ?
                     "" : " AND fon_no::text = @FonNo";
-
+                var ihracFilter = string.IsNullOrEmpty(ihrac_no) || ihrac_no == "All" || ihrac_no == "$__all" ?
+                    "" : " AND ihrac_no::text = @IhracNo";
                 // HAFTALIK KÜMÜLATİF BÜYÜME ANALİZİ
                 var sql = $@"
             WITH haftalik_veriler AS (
@@ -257,6 +259,7 @@ namespace NakitAkis.Controllers
                   AND baslangic_tarihi IS NOT NULL
                   AND COALESCE(mevduat_tutari, 0) > 0
                   {fonFilter}
+                  {ihracFilter}
                 GROUP BY DATE_TRUNC('week', baslangic_tarihi), COALESCE(fon_no::text, 'bilinmiyor')
             ),
             kumulatif_hesaplamalar AS (
@@ -313,6 +316,7 @@ namespace NakitAkis.Controllers
                 {
                     KaynakKurulus = kaynak_kurulus,
                     FonNo = fm_fonlar,
+                    IhracNo=ihrac_no,
                     FromDate = DateTime.UtcNow.AddMonths(-6), // 6 aylık veri
                     ToDate = DateTime.UtcNow
                 });
@@ -484,19 +488,25 @@ namespace NakitAkis.Controllers
                                          [FromQuery] string variable = null,
                                          [FromQuery] string kaynak_kurulus = null,
                                          [FromQuery] string fm_fonlar = null,
-                                         [FromQuery] string ihrac_no = null
-            )
+                                         [FromQuery] string ihrac_no = null)
         {
             try
             {
-                _logger.LogInformation("=== VARIABLE REQUEST ===");
-                _logger.LogInformation("Variable: {variable}", variable);
-                _logger.LogInformation("Kaynak Kurulus: {kurulus}", kaynak_kurulus);
-                _logger.LogInformation("FM Fonlar: {fonlar}", fm_fonlar);
-                _logger.LogInformation("Ihrac No: {ihrac}", ihrac_no);
+                _logger.LogInformation("=== VARIABLE REQUEST DEBUG ===");
                 _logger.LogInformation("Request method: {method}", HttpContext.Request.Method);
+                _logger.LogInformation("Variable: {variable}", request?.Variable ?? variable);
+                _logger.LogInformation("Request body params: {params}", request?.Params != null ? string.Join(", ", request.Params.Select(x => $"{x.Key}={x.Value}")) : "null");
+                _logger.LogInformation("Query params - kaynak_kurulus: {kurulus}", kaynak_kurulus);
+                _logger.LogInformation("Query params - fm_fonlar: {fonlar}", fm_fonlar);
+                _logger.LogInformation("Query params - ihrac_no: {ihrac}", ihrac_no);
 
                 var variableName = request?.Variable ?? variable;
+                var kaynakKurulusParam = request?.Params?.GetValueOrDefault("kaynak_kurulus") ?? kaynak_kurulus;
+                var fonParam = request?.Params?.GetValueOrDefault("fm_fonlar") ?? fm_fonlar;
+                var ihracParam = request?.Params?.GetValueOrDefault("ihrac_no") ?? ihrac_no;
+
+                _logger.LogInformation("Final params - Variable: {variable}, Kurulus: {kurulus}, Fon: {fon}, Ihrac: {ihrac}",
+                    variableName, kaynakKurulusParam, fonParam, ihracParam);
 
                 if (string.IsNullOrEmpty(variableName))
                 {
@@ -514,11 +524,10 @@ namespace NakitAkis.Controllers
 
                     case "fon_no":
                     case "fm_fonlar":
-                        var kurulus = kaynak_kurulus ?? "FİBABANKA";
-                        _logger.LogInformation("Getting fonlar for kurulus: {kurulus}", kurulus);
-
+                        var kurulus = kaynakKurulusParam ?? "FİBABANKA";
+                        _logger.LogInformation("Getting fonlar for kurulus: '{kurulus}'", kurulus);
                         var fonlar = await _nakitAkisService.GetFonlarAsync(kurulus);
-                        _logger.LogInformation("Found {count} fonlar", fonlar.Count);
+                        _logger.LogInformation("Found {count} fonlar for kurulus: {kurulus}", fonlar.Count, kurulus);
 
                         if (fonlar.Any())
                         {
@@ -527,7 +536,6 @@ namespace NakitAkis.Controllers
                                 text = $"{f.FonNo} (₺{f.ToplamTutar:N0})",
                                 value = f.FonNo
                             }).ToList();
-
                             _logger.LogInformation("Returning {count} fon options", result.Count);
                             return Ok(result);
                         }
@@ -536,11 +544,18 @@ namespace NakitAkis.Controllers
                             _logger.LogWarning("No fonlar found for kurulus: {kurulus}", kurulus);
                             return Ok(new[] { new { text = "Fon bulunamadı", value = "" } });
                         }
+
                     case "ihrac_no":
-                        var kurulusIhrac = kaynak_kurulus ?? "FİBABANKA";
-                        var fonNoIhrac = fm_fonlar;
+                        var kurulusIhrac = kaynakKurulusParam ?? "FİBABANKA";
+                        var fonNoIhrac = fonParam;
 
                         _logger.LogInformation("Getting ihraclar for kurulus: '{kurulus}', fon: '{fon}'", kurulusIhrac, fonNoIhrac);
+
+                        if (string.IsNullOrEmpty(fonNoIhrac))
+                        {
+                            _logger.LogWarning("Fon not selected for ihrac query");
+                            return Ok(new[] { new { text = "Önce fon seçin", value = "" } });
+                        }
 
                         try
                         {
@@ -551,20 +566,29 @@ namespace NakitAkis.Controllers
                             {
                                 var ihracResult = ihraclar.Select(i => new
                                 {
-                                    text = $"{i.IhracNo} (₺{i.ToplamTutar:N0})",
-                                    value = i.IhracNo
+                                    text = $"İhraç {i.IhracNo} (₺{i.ToplamTutar:N0} - {i.KayitSayisi} kayıt)",
+                                    value = i.IhracNo,
+                                    tutar = i.ToplamTutar, // Debug için ekle
+                                    kayit = i.KayitSayisi  // Debug için ekle
                                 }).ToList();
+
+                                // Debug log ekle
+                                foreach (var item in ihracResult)
+                                {
+                                    _logger.LogInformation("İhraç return: {text}, value: {value}, tutar: {tutar}",
+                                        item.text, item.value, item.tutar);
+                                }
 
                                 return Ok(ihracResult);
                             }
                             else
                             {
-                                return Ok(new[] { new { text = "İhraç bulunamadı", value = "" } });
+                                return Ok(new[] { new { text = "Bu fon için ihraç bulunamadı", value = "" } });
                             }
                         }
                         catch (Exception ihracEx)
                         {
-                            _logger.LogError(ihracEx, "Error getting ihraclar");
+                            _logger.LogError(ihracEx, "Error getting ihraclar for kurulus: {kurulus}, fon: {fon}", kurulusIhrac, fonNoIhrac);
                             return Ok(new[] { new { text = "İhraç yüklenirken hata", value = "" } });
                         }
 

@@ -2,7 +2,7 @@
 {
     public class IhracBilgi
     {
-        public string IhracNo { get; set; } = string.Empty;
+        public string IhracNo { get; set; } = "";
         public int KayitSayisi { get; set; }
         public decimal ToplamTutar { get; set; }
         

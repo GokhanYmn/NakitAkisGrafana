@@ -28,3 +28,67 @@ export interface TrendData{
     kumulatif_buyume_yuzde:number;
     kurulus:string;
 }
+// Mevcut interface'lerin altına ekle:
+
+export interface DashboardConfig {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface FonBilgi {
+  fonNo: string;
+  toplamTutar: number;
+  kayitSayisi: number;
+}
+
+export interface IhracBilgi {
+  ihracNo: string;
+  toplamTutar: number;
+  kayitSayisi: number;
+}
+
+export interface AnalysisData {
+  toplamFaizTutari: number;
+  toplamModelFaizTutari: number;
+  farkTutari: number;
+  farkYuzdesi: number;
+  faizOrani: number;
+}
+
+export interface HistoricalData {
+  tarih: string;
+  toplamFaizTutari: number;
+  toplamModelFaizTutari: number;
+  farkTutari: number;
+  farkYuzdesi: number;
+}
+
+// Dashboard türleri
+export const DASHBOARD_TYPES: DashboardConfig[] = [
+  {
+    id: 'trends',
+    name: 'Haftalık Trend Analizi',
+    description: 'Kümülatif büyüme ve trend grafiği',
+    icon: '📈'
+  },
+  {
+    id: 'analysis',
+    name: 'Nakit Akış Analizi',
+    description: 'Faiz oranı analizi ve karşılaştırma',
+    icon: '💰'
+  },
+  {
+    id: 'historical',
+    name: 'Geçmiş Veriler',
+    description: 'Tarihsel performans analizi',
+    icon: '📊'
+  },
+  {
+    id: 'comparison',
+    name: 'Kuruluş Karşılaştırma',
+    description: 'Farklı kuruluşları karşılaştır',
+    icon: '⚖️'
+  }
+];
