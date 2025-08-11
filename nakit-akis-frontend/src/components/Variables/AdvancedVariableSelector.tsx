@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import NakitAkisApi from '../../services/nakitAkisApi';
 import { GrafanaVariable, DASHBOARD_TYPES, DashboardConfig } from '../../types/nakitAkis';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface AdvancedVariableSelectorProps {
   onSelectionChange: (selection: {
@@ -12,6 +13,8 @@ interface AdvancedVariableSelectorProps {
 }
 
 const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onSelectionChange }) => {
+  const { theme } = useTheme();
+  
   // State'ler
   const [dashboardType, setDashboardType] = useState<string>('trends');
   const [kaynakKuruluslar, setKaynakKuruluslar] = useState<GrafanaVariable[]>([]);
@@ -94,37 +97,43 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
   }, [selectedKurulus, selectedFon]);
 
   // Seçim değişikliklerini parent'a bildir
-useEffect(() => {
-  onSelectionChange({
-    dashboardType,
-    kaynakKurulus: selectedKurulus,
-    fonNo: selectedFon,
-    ihracNo: selectedIhrac
-  });
-}, [dashboardType, selectedKurulus, selectedFon, selectedIhrac]);
+  useEffect(() => {
+    onSelectionChange({
+      dashboardType,
+      kaynakKurulus: selectedKurulus,
+      fonNo: selectedFon,
+      ihracNo: selectedIhrac
+    });
+  }, [dashboardType, selectedKurulus, selectedFon, selectedIhrac]);
 
   const selectStyles = {
     padding: '10px',
     fontSize: '14px',
     borderRadius: '6px',
-    border: '1px solid #ddd',
-    backgroundColor: 'white',
+    border: `1px solid ${theme.colors.border}`,
+    backgroundColor: theme.colors.background,
+    color: theme.colors.text,
     minWidth: '200px'
   };
 
   return (
     <div style={{ 
       padding: '20px', 
-      border: '1px solid #ddd', 
+      border: `1px solid ${theme.colors.border}`,
       borderRadius: '8px',
-      backgroundColor: '#f9f9f9',
+      backgroundColor: theme.colors.surface,
       marginBottom: '20px'
     }}>
-      <h3>🎛️ Dashboard & Filtre Seçimi</h3>
+      <h3 style={{ color: theme.colors.text }}>🎛️ Dashboard & Filtre Seçimi</h3>
       
       {/* Dashboard Type Seçimi */}
       <div style={{ marginBottom: '15px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '5px', 
+          fontWeight: 'bold',
+          color: theme.colors.text
+        }}>
           📊 Dashboard Türü:
         </label>
         <select 
@@ -138,17 +147,26 @@ useEffect(() => {
             </option>
           ))}
         </select>
-        <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+        <div style={{ 
+          fontSize: '12px', 
+          color: theme.colors.textSecondary,
+          marginTop: '5px' 
+        }}>
           {DASHBOARD_TYPES.find(d => d.id === dashboardType)?.description}
         </div>
       </div>
 
       {/* Variable Seçimleri */}
-      <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'end' }}>
+      <div style={{ display: 'flex',gap: '15px',justifyContent:'center',  flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Kaynak Kuruluş */}
         <div>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            🏢 Kaynak Kuruluş: *
+          <label style={{ 
+            display: 'block',            
+            marginBottom: '5px', 
+            fontWeight: 'bold',
+            color: theme.colors.text
+          }}>
+            🏢 Kaynak Kuruluş:
           </label>
           <select 
             value={selectedKurulus}
@@ -163,12 +181,19 @@ useEffect(() => {
               </option>
             ))}
           </select>
-          {loading.kurulus && <div style={{ fontSize: '12px', color: 'blue' }}>⏳ Yükleniyor...</div>}
+          {loading.kurulus && (
+            <div style={{ fontSize: '12px', color: theme.colors.primary }}>⏳ Yükleniyor...</div>
+          )}
         </div>
 
         {/* Fon Numarası */}
         <div>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '5px', 
+            fontWeight: 'bold',
+            color: theme.colors.text
+          }}>
             💼 Fon Numarası:
           </label>
           <select 
@@ -179,33 +204,42 @@ useEffect(() => {
           >
             <option value="">Tüm Fonlar</option>
             {fonlar.map((fon) => (
-              <option key={fon.value} value={fon.value}>
+              <option key={`fon-${fon.value}`} value={fon.value}>
                 {fon.text}
               </option>
             ))}
           </select>
-          {loading.fon && <div style={{ fontSize: '12px', color: 'blue' }}>⏳ Yükleniyor...</div>}
+          {loading.fon && (
+            <div style={{ fontSize: '12px', color: theme.colors.primary }}>⏳ Yükleniyor...</div>
+          )}
         </div>
 
         {/* İhraç Numarası */}
         <div>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-    🎯 İhraç Numarası:
-         </label>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '5px', 
+            fontWeight: 'bold',
+            color: theme.colors.text
+          }}>
+            🎯 İhraç Numarası:
+          </label>
           <select 
-    value={selectedIhrac}
-    onChange={(e) => setSelectedIhrac(e.target.value)}
-    disabled={loading.ihrac || !selectedFon}
-    style={selectStyles}
-  >
-    <option value="">Tüm İhraçlar</option>
-    {ihraclar.map((ihrac, index) => (
-      <option key={`ihrac-${ihrac.value}-${index}`} value={ihrac.value}>
-        {ihrac.text}
-      </option>
-    ))}
-  </select>
-  {loading.ihrac && <div style={{ fontSize: '12px', color: 'blue' }}>⏳ Yükleniyor...</div>}
+            value={selectedIhrac}
+            onChange={(e) => setSelectedIhrac(e.target.value)}
+            disabled={loading.ihrac || !selectedFon}
+            style={selectStyles}
+          >
+            <option value="">Tüm İhraçlar</option>
+            {ihraclar.map((ihrac, index) => (
+              <option key={`ihrac-${ihrac.value}-${index}`} value={ihrac.value}>
+                {ihrac.text}
+              </option>
+            ))}
+          </select>
+          {loading.ihrac && (
+            <div style={{ fontSize: '12px', color: theme.colors.primary }}>⏳ Yükleniyor...</div>
+          )}
         </div>
       </div>
 
@@ -214,15 +248,26 @@ useEffect(() => {
         <div style={{ 
           marginTop: '15px', 
           padding: '10px', 
-          backgroundColor: '#e8f5e8', 
+          backgroundColor: theme.colors.background,
           borderRadius: '6px',
-          fontSize: '14px'
+          fontSize: '14px',
+          border: `1px solid ${theme.colors.border}`
         }}>
-          <strong>📋 Aktif Filtreler:</strong>
+          <strong style={{ color: theme.colors.text }}>📋 Aktif Filtreler:</strong>
           <br />
-          🏢 Kuruluş: <strong>{selectedKurulus}</strong>
-          {selectedFon && <><br />💼 Fon: <strong>{selectedFon}</strong></>}
-          {selectedIhrac && <><br />🎯 İhraç: <strong>{selectedIhrac}</strong></>}
+          <span style={{ color: theme.colors.text }}>🏢 Kuruluş: <strong>{selectedKurulus}</strong></span>
+          {selectedFon && (
+            <>
+              <br />
+              <span style={{ color: theme.colors.text }}>💼 Fon: <strong>{selectedFon}</strong></span>
+            </>
+          )}
+          {selectedIhrac && (
+            <>
+              <br />
+              <span style={{ color: theme.colors.text }}>🎯 İhraç: <strong>{selectedIhrac}</strong></span>
+            </>
+          )}
         </div>
       )}
     </div>
