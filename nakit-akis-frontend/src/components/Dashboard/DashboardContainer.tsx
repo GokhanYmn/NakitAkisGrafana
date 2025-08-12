@@ -9,13 +9,15 @@ interface DashboardContainerProps {
   kaynakKurulus: string;
   fonNo: string;
   ihracNo: string;
+  faizOrani: number; // EKLENDI - NULL OLMAZ ÇÜNKÜ APP.TSX'DE KONTROL EDİLDİ
 }
 
 const DashboardContainer: React.FC<DashboardContainerProps> = ({
   dashboardType,
   kaynakKurulus,
   fonNo,
-  ihracNo
+  ihracNo,
+  faizOrani
 }) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
         setError('');
         setData(null);
         
-        console.log('Dashboard data yükleniyor:', { dashboardType, kaynakKurulus, fonNo, ihracNo });
+        console.log('Dashboard data yükleniyor:', { dashboardType, kaynakKurulus, fonNo, ihracNo, faizOrani });
 
         switch (dashboardType) {
           case 'trends':
@@ -53,7 +55,6 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
             break;
             
           case 'comparison':
-            // Karşılaştırma için birden fazla kuruluş verisi
             const comparisonData = await NakitAkisApi.getTrends(kaynakKurulus, fonNo, ihracNo);
             setData(comparisonData);
             break;
@@ -70,7 +71,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
     };
 
     loadData();
-  }, [dashboardType, kaynakKurulus, fonNo, ihracNo]);
+  }, [dashboardType, kaynakKurulus, fonNo, ihracNo, faizOrani]);
 
   // Loading state
   if (loading) {
@@ -87,6 +88,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
         <p>Kuruluş: <strong>{kaynakKurulus}</strong></p>
         {fonNo && <p>Fon: <strong>{fonNo}</strong></p>}
         {ihracNo && <p>İhraç: <strong>{ihracNo}</strong></p>}
+        <p>Faiz Oranı: <strong>%{faizOrani}</strong></p>
       </div>
     );
   }
@@ -120,8 +122,8 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
     );
   }
 
-  // No data state
-  if (!data || (Array.isArray(data) && data.length === 0)) {
+  // No data state - ANALYSIS İÇİN SKIP ET
+  if (dashboardType !== 'analysis' && (!data || (Array.isArray(data) && data.length === 0))) {
     return (
       <div style={{ 
         padding: '40px', 
@@ -138,6 +140,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
           Kuruluş: {kaynakKurulus}<br />
           {fonNo && <>Fon: {fonNo}<br /></>}
           {ihracNo && <>İhraç: {ihracNo}<br /></>}
+          Faiz Oranı: %{faizOrani}
         </div>
       </div>
     );
@@ -150,33 +153,14 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
         return <TrendChart data={data} kurulus={kaynakKurulus} />;
         
       case 'analysis':
-  return (
-    <div style={{ 
-      padding: '20px', 
-      border: '1px solid #ddd', 
-      borderRadius: '8px',
-      backgroundColor: 'white'
-    }}>
-      <h3>💰 Nakit Akış Analizi</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
-        <div style={{ padding: '15px', backgroundColor: '#e8f5e8', borderRadius: '6px' }}>
-          <h4>📈 Toplam Faiz Tutarı</h4>
-          <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'green' }}>
-            ₺{data.toplamFaizTutari?.toLocaleString('tr-TR') || '0'}
-          </p>
-        </div>
-        <div style={{ padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
-          <h4>🎯 Model Faiz Tutarı</h4>
-          <p style={{ fontSize: '24px', fontWeight: 'bold', color: 'blue' }}>
-            ₺{data.toplamModelFaizTutari?.toLocaleString('tr-TR') || '0'}
-          </p>
-        </div>
-      </div>
-      <p style={{ marginTop: '15px', fontSize: '14px', color: '#666' }}>
-        Son güncelleme: {new Date().toLocaleString('tr-TR')}
-      </p>
-    </div>
-  );
+        return (
+          <AnalysisChart 
+            kaynakKurulus={kaynakKurulus}
+            fonNo={fonNo}
+            ihracNo={ihracNo}
+            initialFaizOrani={faizOrani} // MASTER FAİZ ORANI
+          />
+        );
         
       case 'historical':
         return (
@@ -187,41 +171,41 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
             backgroundColor: 'white'
           }}>
             <h3>📊 Geçmiş Veriler</h3>
-            <p>Geçmiş veri analizi burada görünecek...</p>
-            <div style={{ fontSize: '14px', color: '#666' }}>
-              Veri sayısı: {Array.isArray(data) ? data.length : 'N/A'}
-            </div>
-          </div>
-        );
-        
-      case 'comparison':
-        return (
-          <div style={{ 
-            padding: '20px', 
-            border: '1px solid #ddd', 
-            borderRadius: '8px',
-            backgroundColor: 'white'
-          }}>
-            <h3>⚖️ Kuruluş Karşılaştırma</h3>
-            <TrendChart data={data} kurulus={`${kaynakKurulus} - Karşılaştırma`} />
-          </div>
-        );
-        
-      default:
-        return (
-          <div style={{ padding: '20px', textAlign: 'center' }}>
-            <h3>❓ Bilinmeyen Dashboard Türü</h3>
-            <p>Dashboard türü: {dashboardType}</p>
-          </div>
-        );
-    }
-  };
+           <p>Geçmiş veri analizi burada görünecek...</p>
+           <div style={{ fontSize: '14px', color: '#666' }}>
+             Veri sayısı: {Array.isArray(data) ? data.length : 'N/A'}
+           </div>
+         </div>
+       );
+       
+     case 'comparison':
+       return (
+         <div style={{ 
+           padding: '20px', 
+           border: '1px solid #ddd', 
+           borderRadius: '8px',
+           backgroundColor: 'white'
+         }}>
+           <h3>⚖️ Kuruluş Karşılaştırma</h3>
+           <TrendChart data={data} kurulus={`${kaynakKurulus} - Karşılaştırma`} />
+         </div>
+       );
+       
+     default:
+       return (
+         <div style={{ padding: '20px', textAlign: 'center' }}>
+           <h3>❓ Bilinmeyen Dashboard Türü</h3>
+           <p>Dashboard türü: {dashboardType}</p>
+         </div>
+       );
+   }
+ };
 
-  return (
-    <div style={{ marginTop: '20px' }}>
-      {renderDashboard()}
-    </div>
-  );
+ return (
+   <div style={{ marginTop: '20px' }}>
+     {renderDashboard()}
+   </div>
+ );
 };
 
 export default DashboardContainer;

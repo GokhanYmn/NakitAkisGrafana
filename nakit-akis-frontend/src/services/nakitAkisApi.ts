@@ -105,22 +105,53 @@ static async getTrends(kaynakKurulus: string, fonNo?: string, ihracNo?: string):
 
   // Nakit akış analizi
   static async getAnalysis(parametreler: {
-    faizOrani: number;
-    kaynakKurulus: string;
-    fonNo?: string;
-    ihracNo?: string;
-    bankalar?: string[];
-  }): Promise<any> {
-    const response = await api.get('/nakitakis/analiz', {
-      params: {
-        faizOrani: parametreler.faizOrani,
-        kaynakKurulus: parametreler.kaynakKurulus,
-        fonNo: parametreler.fonNo,
-        ihracNo: parametreler.ihracNo,
-        bankalar: parametreler.bankalar?.join(',') || ''
-      }
-    });
+  faizOrani: number;
+  kaynakKurulus: string;
+  fonNo?: string;
+  ihracNo?: string;
+  baslangicTarihi?: string;
+  bitisTarihi?: string;
+}): Promise<any> {
+  try {
+    console.log('API Service - getAnalysis:', parametreler);
+    
+    const params: any = {
+      faizOrani: parametreler.faizOrani,
+      kaynak_kurulus: parametreler.kaynakKurulus
+    };
+    
+    // Opsiyonel parametreler
+    if (parametreler.fonNo && parametreler.fonNo !== '') {
+      params.fm_fonlar = parametreler.fonNo;
+    }
+    
+    if (parametreler.ihracNo && parametreler.ihracNo !== '') {
+      params.ihrac_no = parametreler.ihracNo;
+    }
+    
+    if (parametreler.baslangicTarihi) {
+      params.baslangic_tarihi = parametreler.baslangicTarihi;
+    }
+    
+    if (parametreler.bitisTarihi) {
+      params.bitis_tarihi = parametreler.bitisTarihi;
+    }
+    
+    console.log('API Parameters:', params);
+    
+    const response = await api.get('/grafana/analysis', { params });
+    
+    console.log('API Response:', response.data);
     return response.data;
+  } catch (error: any) {
+    console.error('getAnalysis API error:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+
   }
 
   // Geçmiş veriler

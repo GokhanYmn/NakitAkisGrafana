@@ -173,7 +173,7 @@ namespace NakitAkis.Services
                 var fonFilter = BuildFonFilter(parametre.SecilenFonNo);
                 var ihracFilter = BuildIhracFilter(parametre.SecilenIhracNo);
 
-                // GERÇEK HESAPLAMA İLE SORGU
+                //Sgl Sorgusu
                 var sql = $@"
            WITH daily_data AS (
                 SELECT 

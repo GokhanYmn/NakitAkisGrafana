@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import NakitAkisApi from '../../services/nakitAkisApi';
 import { GrafanaVariable, DASHBOARD_TYPES, DashboardConfig } from '../../types/nakitAkis';
 import { useTheme } from '../../contexts/ThemeContext';
+import ExportMenu from '../UI/ExportMenu';
 
 interface AdvancedVariableSelectorProps {
   onSelectionChange: (selection: {
@@ -9,6 +10,7 @@ interface AdvancedVariableSelectorProps {
     kaynakKurulus: string;
     fonNo: string;
     ihracNo: string;
+    faizOrani: number | null;
   }) => void;
 }
 
@@ -25,11 +27,17 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
   const [selectedFon, setSelectedFon] = useState<string>('');
   const [selectedIhrac, setSelectedIhrac] = useState<string>('');
   
+  // FAİZ ORANI BOŞ BAŞLIYOR
+  const [currentFaizOrani, setCurrentFaizOrani] = useState<number | null>(null);
+  const [faizOraniInput, setFaizOraniInput] = useState<string>('');
+  
   const [loading, setLoading] = useState({
     kurulus: false,
     fon: false,
     ihrac: false
   });
+
+  const [analysisData, setAnalysisData] = useState<any>(null);
 
   // Kaynak kuruluşları yükle
   useEffect(() => {
@@ -63,6 +71,7 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
           setSelectedFon('');
           setSelectedIhrac('');
           setIhraclar([]);
+          setAnalysisData(null);
         } catch (error) {
           console.error('Fon yükleme hatası:', error);
           setFonlar([]);
@@ -84,6 +93,7 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
           const data = await NakitAkisApi.getIhraclar(selectedKurulus, selectedFon);
           setIhraclar(data);
           setSelectedIhrac('');
+          setAnalysisData(null);
         } catch (error) {
           console.error('İhraç yükleme hatası:', error);
           setIhraclar([]);
@@ -96,15 +106,45 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
     }
   }, [selectedKurulus, selectedFon]);
 
+  // FAİZ ORANI CHANGE HANDLER
+  const handleFaizOraniChange = (value: string) => {
+    setFaizOraniInput(value);
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue > 0 && numValue <= 100) {
+      setCurrentFaizOrani(numValue);
+    } else {
+      setCurrentFaizOrani(null);
+    }
+  };
+
   // Seçim değişikliklerini parent'a bildir
   useEffect(() => {
     onSelectionChange({
       dashboardType,
       kaynakKurulus: selectedKurulus,
       fonNo: selectedFon,
-      ihracNo: selectedIhrac
+      ihracNo: selectedIhrac,
+      faizOrani: currentFaizOrani
     });
-  }, [dashboardType, selectedKurulus, selectedFon, selectedIhrac]);
+  }, [dashboardType, selectedKurulus, selectedFon, selectedIhrac, currentFaizOrani, onSelectionChange]);
+
+  // Quick Analysis fonksiyonu
+  const handleQuickAnalysis = async () => {
+    if (!selectedKurulus || !currentFaizOrani) return;
+    
+    try {
+      const quickData = await NakitAkisApi.getAnalysis({
+        faizOrani: currentFaizOrani,
+        kaynakKurulus: selectedKurulus,
+        fonNo: selectedFon,
+        ihracNo: selectedIhrac
+      });
+      setAnalysisData(quickData);
+      console.log('Quick analysis completed for export:', quickData);
+    } catch (error) {
+      console.error('Quick analysis failed:', error);
+    }
+  };
 
   const selectStyles = {
     padding: '10px',
@@ -115,6 +155,9 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
     color: theme.colors.text,
     minWidth: '200px'
   };
+
+  // FAİZ ORANI VALIDATION
+  const isFaizOraniValid = currentFaizOrani !== null && currentFaizOrani > 0;
 
   return (
     <div style={{ 
@@ -157,7 +200,7 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
       </div>
 
       {/* Variable Seçimleri */}
-      <div style={{ display: 'flex',gap: '15px',justifyContent:'center',  flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '15px', justifyContent:'center', flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Kaynak Kuruluş */}
         <div>
           <label style={{ 
@@ -166,7 +209,7 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
             fontWeight: 'bold',
             color: theme.colors.text
           }}>
-            🏢 Kaynak Kuruluş:
+            🏢 Kaynak Kuruluş: *
           </label>
           <select 
             value={selectedKurulus}
@@ -241,9 +284,90 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
             <div style={{ fontSize: '12px', color: theme.colors.primary }}>⏳ Yükleniyor...</div>
           )}
         </div>
+
+        {/* FAİZ ORANI INPUT'U - SADECE ANALYSIS DASHBOARD'DA */}
+        {selectedKurulus && dashboardType === 'analysis' && (
+          <div>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '5px', 
+              fontWeight: 'bold',
+              color: theme.colors.text
+            }}>
+              📊 Faiz Oranı (%): *
+            </label>
+            <input
+              type="number"
+              value={faizOraniInput}
+              onChange={(e) => handleFaizOraniChange(e.target.value)}
+              placeholder="Örn: 15.5"
+              min="0.1"
+              max="100"
+              step="0.1"
+              style={{
+                padding: '10px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: `1px solid ${!isFaizOraniValid && faizOraniInput ? theme.colors.error : theme.colors.border}`,
+                backgroundColor: theme.colors.background,
+                color: theme.colors.text,
+                width: '120px'
+              }}
+            />
+            {!isFaizOraniValid && faizOraniInput && (
+              <div style={{ fontSize: '12px', color: theme.colors.error, marginTop: '2px' }}>
+                ⚠️ 0.1-100 arası değer girin
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* EXPORT MENU - SADECE ANALYSIS + FAİZ ORANI VALİD */}
+        {selectedKurulus && dashboardType === 'analysis' && isFaizOraniValid && (
+          <div>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '5px', 
+              fontWeight: 'bold',
+              color: theme.colors.text
+            }}>
+              📥 Export:
+            </label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {!analysisData && (
+                <button
+                  onClick={handleQuickAnalysis}
+                  style={{
+                    padding: '10px 12px',
+                    backgroundColor: theme.colors.warning,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  📊 Analiz
+                </button>
+              )}
+              
+              {analysisData && (
+                <ExportMenu 
+                  analysisData={analysisData}
+                  filters={{
+                    kaynakKurulus: selectedKurulus,
+                    fonNo: selectedFon,
+                    ihracNo: selectedIhrac,
+                    faizOrani: currentFaizOrani!
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Seçim Özeti */}
+      {/* Seçim Özeti - FAİZ ORANI SADECE ANALYSIS'DE */}
       {selectedKurulus && (
         <div style={{ 
           marginTop: '15px', 
@@ -266,6 +390,25 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
             <>
               <br />
               <span style={{ color: theme.colors.text }}>🎯 İhraç: <strong>{selectedIhrac}</strong></span>
+            </>
+          )}
+          {/* FAİZ ORANI SADECE ANALYSIS DASHBOARD'DA */}
+          {dashboardType === 'analysis' && (
+            <>
+              <br />
+              {isFaizOraniValid ? (
+                <span style={{ color: theme.colors.success }}>📊 Faiz Oranı: <strong>%{currentFaizOrani}</strong> ✅</span>
+              ) : (
+                <span style={{ color: theme.colors.error }}>📊 Faiz Oranı: <strong>Gerekli</strong> ⚠️</span>
+              )}
+            </>
+          )}
+          {analysisData && (
+            <>
+              <br />
+              <span style={{ color: theme.colors.success, fontSize: '12px' }}>
+                ✅ Export için analiz verileri hazır
+              </span>
             </>
           )}
         </div>

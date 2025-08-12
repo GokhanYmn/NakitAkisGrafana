@@ -1,34 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import NakitAkisApi from '../../services/nakitAkisApi';
+import { useTheme } from '../../contexts/ThemeContext'; // TEMA CONTEXT'İ EKLE
 
 interface AnalysisChartProps {
   kaynakKurulus: string;
   fonNo: string;
   ihracNo: string;
+  initialFaizOrani: number;
 }
 
-const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihracNo }) => {
-  const [faizOrani, setFaizOrani] = useState<number>(15);
+const AnalysisChart: React.FC<AnalysisChartProps> = ({ 
+  kaynakKurulus, 
+  fonNo, 
+  ihracNo, 
+  initialFaizOrani 
+}) => {
+  const { theme } = useTheme(); // TEMA HOOK'U EKLE
+  
+  const [faizOrani, setFaizOrani] = useState<number>(initialFaizOrani);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  // Master faiz oranı değiştiğinde sync et
+  useEffect(() => {
+    setFaizOrani(initialFaizOrani);
+    setAnalysisData(null);
+  }, [initialFaizOrani]);
 
   const handleAnalysisCalculate = async () => {
     setLoading(true);
     try {
-      // Simüle edilmiş analiz verisi - sonra gerçek API'yi çağıracağız
-      const mockData = {
-        toplamFaizTutari: 2500000,
-        toplamModelFaizTutari: 2750000,
-        farkTutari: -250000,
-        farkYuzdesi: -9.09,
-        faizOrani: faizOrani
-      };
+      console.log('Real API call starting...', { 
+        faizOrani, 
+        kaynakKurulus, 
+        fonNo, 
+        ihracNo 
+      });
+
+      const realData = await NakitAkisApi.getAnalysis({
+        faizOrani: faizOrani,
+        kaynakKurulus: kaynakKurulus,
+        fonNo: fonNo,
+        ihracNo: ihracNo
+      });
+
+      console.log('Real API response:', realData);
+      setAnalysisData(realData);
+    } catch (error: any) {
+      console.error('Analysis API call failed:', error);
       
-      // Simüle gecikme
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setAnalysisData(mockData);
-    } catch (error) {
-      console.error('Analysis calculation failed:', error);
+      setAnalysisData({
+        toplamFaizTutari: 0,
+        toplamModelFaizTutari: 0,
+        farkTutari: 0,
+        farkYuzdesi: 0,
+        faizOrani: faizOrani,
+        mesaj: 'API hatası: ' + (error.message || 'Bilinmeyen hata')
+      });
     } finally {
       setLoading(false);
     }
@@ -37,48 +65,92 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
   return (
     <div style={{ 
       padding: '20px', 
-      border: '1px solid #ddd', 
+      border: `1px solid ${theme.colors.border}`, // TEMA BORDER
       borderRadius: '8px',
-      backgroundColor: 'white'
+      backgroundColor: theme.colors.surface // TEMA BACKGROUND
     }}>
-      <h3>💰 Nakit Akış Analizi</h3>
+      <h3 style={{ color: theme.colors.text }}>💰 Nakit Akış Analizi</h3>
       
-      {/* Faiz Oranı Input */}
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
-        <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
-          📊 Faiz Oranı (%):
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <input 
-            type="number" 
-            value={faizOrani}
-            onChange={(e) => setFaizOrani(Number(e.target.value))}
-            min="0"
-            max="100"
-            step="0.1"
-            style={{ 
-              padding: '8px 12px', 
-              fontSize: '16px', 
-              width: '120px',
-              borderRadius: '4px',
-              border: '1px solid #ddd'
-            }}
-          />
+      {/* Faiz Oranı Display - DARK MODE UYUMLU */}
+      <div style={{ 
+        marginBottom: '20px', 
+        padding: '20px', 
+        backgroundColor: theme.colors.background, // TEMA BACKGROUND
+        borderRadius: '6px',
+        border: `1px solid ${theme.colors.border}` // TEMA BORDER
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center', 
+          justifyContent: 'center',
+          gap: '15px'
+        }}>
+          {/* Faiz Oranı Label + Value */}
+          <div style={{ textAlign: 'center' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '10px', 
+              fontWeight: 'bold', 
+              fontSize: '14px',
+              color: theme.colors.text // TEMA TEXT
+            }}>
+              📊 Aktif Faiz Oranı
+            </label>
+            <div style={{
+              padding: '15px 25px',
+              backgroundColor: theme.colors.primary, // TEMA PRIMARY COLOR
+              color: 'white', // HER ZAMAN BEYAZ - PRIMARY ÜSTÜNDE
+              borderRadius: '8px',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              minWidth: '100px',
+              display: 'inline-block'
+            }}>
+              %{faizOrani}
+            </div>
+          </div>
+          
+          {/* Analiz Et Butonu */}
           <button 
             onClick={handleAnalysisCalculate}
             disabled={loading}
             style={{ 
-              padding: '10px 20px', 
-              backgroundColor: '#007bff', 
-              color: 'white', 
+              padding: '12px 30px', 
+              backgroundColor: theme.colors.success, // TEMA SUCCESS COLOR
+              color: 'white', // HER ZAMAN BEYAZ - SUCCESS ÜSTÜNDE
               border: 'none', 
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '16px',
+              fontWeight: 'bold',
+              minWidth: '160px',
+              transition: 'all 0.2s ease',
+              opacity: loading ? 0.7 : 1
+            }}
+            onMouseOver={(e) => {
+              if (!loading) {
+                e.currentTarget.style.opacity = '0.9';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.transform = 'translateY(0px)';
             }}
           >
             {loading ? '⏳ Hesaplanıyor...' : '🔄 Analiz Et'}
           </button>
+          
+          {/* Alt Bilgi */}
+          <div style={{ 
+            textAlign: 'center',
+            fontSize: '12px', 
+            color: theme.colors.textSecondary, // TEMA SECONDARY TEXT
+            fontStyle: 'italic'
+          }}>
+            💡 Faiz oranını değiştirmek için yukarıdaki filtreyi kullanın
+          </div>
         </div>
       </div>
 
@@ -86,15 +158,16 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
       <div style={{ 
         marginBottom: '20px', 
         padding: '10px', 
-        backgroundColor: '#e8f5e8', 
+        backgroundColor: theme.colors.background, // TEMA BACKGROUND
         borderRadius: '6px',
-        fontSize: '14px'
+        fontSize: '14px',
+        border: `1px solid ${theme.colors.border}` // TEMA BORDER
       }}>
-        <strong>🎯 Analiz Parametreleri:</strong><br />
-        🏢 Kuruluş: <strong>{kaynakKurulus}</strong><br />
-        {fonNo && <>💼 Fon: <strong>{fonNo}</strong><br /></>}
-        {ihracNo && <>🎯 İhraç: <strong>{ihracNo}</strong><br /></>}
-        📈 Faiz Oranı: <strong>{faizOrani}%</strong>
+        <strong style={{ color: theme.colors.text }}>🎯 Analiz Parametreleri:</strong><br />
+        <span style={{ color: theme.colors.text }}>🏢 Kuruluş: <strong>{kaynakKurulus}</strong></span><br />
+        {fonNo && <><span style={{ color: theme.colors.text }}>💼 Fon: <strong>{fonNo}</strong></span><br /></>}
+        {ihracNo && <><span style={{ color: theme.colors.text }}>🎯 İhraç: <strong>{ihracNo}</strong></span><br /></>}
+        <span style={{ color: theme.colors.text }}>📈 Faiz Oranı: <strong>%{faizOrani}</strong></span>
       </div>
 
       {/* Loading State */}
@@ -102,18 +175,19 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
         <div style={{ 
           padding: '40px', 
           textAlign: 'center',
-          backgroundColor: '#fff3cd',
-          borderRadius: '6px'
+          backgroundColor: theme.colors.warning + '20', // TEMA WARNING + TRANSPARENCY
+          borderRadius: '6px',
+          border: `1px solid ${theme.colors.warning}`
         }}>
-          <h4>⏳ Nakit Akış Analizi Hesaplanıyor...</h4>
-          <p>Faiz oranı: <strong>{faizOrani}%</strong></p>
+          <h4 style={{ color: theme.colors.text }}>⏳ Nakit Akış Analizi Hesaplanıyor...</h4>
+          <p style={{ color: theme.colors.text }}>Faiz oranı: <strong>%{faizOrani}</strong></p>
         </div>
       )}
 
       {/* Analysis Results */}
       {!loading && analysisData && (
         <div>
-          <h4>📊 Analiz Sonuçları</h4>
+          <h4 style={{ color: theme.colors.text }}>📊 Analiz Sonuçları</h4>
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
@@ -123,15 +197,16 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
             {/* Toplam Faiz Tutarı */}
             <div style={{ 
               padding: '20px', 
-              backgroundColor: '#e8f5e8', 
+              backgroundColor: theme.colors.success + '20', // TEMA SUCCESS + TRANSPARENCY
               borderRadius: '8px',
-              textAlign: 'center'
+              textAlign: 'center',
+              border: `1px solid ${theme.colors.success}`
             }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#28a745' }}>💚 Gerçek Faiz Tutarı</h4>
+              <h4 style={{ margin: '0 0 10px 0', color: theme.colors.success }}>💚 Gerçek Faiz Tutarı</h4>
               <p style={{ 
                 fontSize: '24px', 
                 fontWeight: 'bold', 
-                color: '#28a745',
+                color: theme.colors.success,
                 margin: '0'
               }}>
                 ₺{analysisData.toplamFaizTutari.toLocaleString('tr-TR')}
@@ -141,45 +216,49 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
             {/* Model Faiz Tutarı */}
             <div style={{ 
               padding: '20px', 
-              backgroundColor: '#e3f2fd', 
+              backgroundColor: theme.colors.primary + '20', // TEMA PRIMARY + TRANSPARENCY
               borderRadius: '8px',
-              textAlign: 'center'
+              textAlign: 'center',
+              border: `1px solid ${theme.colors.primary}`
             }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#007bff' }}>🎯 Model Faiz Tutarı</h4>
+              <h4 style={{ margin: '0 0 10px 0', color: theme.colors.primary }}>🎯 Model Faiz Tutarı</h4>
               <p style={{ 
                 fontSize: '24px', 
                 fontWeight: 'bold', 
-                color: '#007bff',
+                color: theme.colors.primary,
                 margin: '0'
               }}>
                 ₺{analysisData.toplamModelFaizTutari.toLocaleString('tr-TR')}
               </p>
-              <small style={{ color: '#666' }}>({faizOrani}% oranında)</small>
+              <small style={{ color: theme.colors.textSecondary }}>(%{faizOrani} oranında)</small>
             </div>
 
             {/* Fark */}
             <div style={{ 
               padding: '20px', 
-              backgroundColor: analysisData.farkTutari >= 0 ? '#e8f5e8' : '#f8d7da', 
+              backgroundColor: analysisData.farkTutari >= 0 
+                ? theme.colors.success + '20' 
+                : theme.colors.error + '20',
               borderRadius: '8px',
-              textAlign: 'center'
+              textAlign: 'center',
+              border: `1px solid ${analysisData.farkTutari >= 0 ? theme.colors.success : theme.colors.error}`
             }}>
               <h4 style={{ 
                 margin: '0 0 10px 0', 
-                color: analysisData.farkTutari >= 0 ? '#28a745' : '#dc3545' 
+                color: analysisData.farkTutari >= 0 ? theme.colors.success : theme.colors.error
               }}>
                 {analysisData.farkTutari >= 0 ? '📈' : '📉'} Fark
               </h4>
               <p style={{ 
                 fontSize: '24px', 
                 fontWeight: 'bold', 
-                color: analysisData.farkTutari >= 0 ? '#28a745' : '#dc3545',
+                color: analysisData.farkTutari >= 0 ? theme.colors.success : theme.colors.error,
                 margin: '0'
               }}>
                 ₺{analysisData.farkTutari.toLocaleString('tr-TR')}
               </p>
               <small style={{ 
-                color: analysisData.farkTutari >= 0 ? '#28a745' : '#dc3545',
+                color: analysisData.farkTutari >= 0 ? theme.colors.success : theme.colors.error,
                 fontWeight: 'bold'
               }}>
                 ({analysisData.farkYuzdesi > 0 ? '+' : ''}{analysisData.farkYuzdesi}%)
@@ -191,11 +270,12 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
           <div style={{ 
             marginTop: '20px', 
             padding: '15px', 
-            backgroundColor: '#f8f9fa', 
-            borderRadius: '6px'
+            backgroundColor: theme.colors.background,
+            borderRadius: '6px',
+            border: `1px solid ${theme.colors.border}`
           }}>
-            <h4>📋 Analiz Özeti</h4>
-            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+            <h4 style={{ color: theme.colors.text }}>📋 Analiz Özeti</h4>
+            <ul style={{ margin: '0', paddingLeft: '20px', color: theme.colors.text }}>
               <li>
                 <strong>Faiz Performansı:</strong> {
                   analysisData.farkTutari >= 0 
@@ -225,12 +305,15 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({ kaynakKurulus, fonNo, ihr
         <div style={{ 
           padding: '40px', 
           textAlign: 'center',
-          backgroundColor: '#f8f9fa',
+          backgroundColor: theme.colors.background,
           borderRadius: '6px',
-          color: '#666'
+          border: `1px solid ${theme.colors.border}`
         }}>
-          <h4>💡 Nakit Akış Analizi</h4>
-          <p>Faiz oranını belirleyip <strong>"Analiz Et"</strong> butonuna tıklayın.</p>
+          <h4 style={{ color: theme.colors.text }}>💡 Nakit Akış Analizi</h4>
+          <p style={{ color: theme.colors.text }}><strong>"Analiz Et"</strong> butonuna tıklayarak başlayın.</p>
+          <p style={{ fontSize: '12px', color: theme.colors.textSecondary }}>
+            Faiz oranı: <strong>%{faizOrani}</strong> (Yukarıdaki filtreden değiştirilebilir)
+          </p>
         </div>
       )}
     </div>

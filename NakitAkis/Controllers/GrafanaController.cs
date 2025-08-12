@@ -6,6 +6,7 @@ using NakitAkis.Models;
 using NakitAkis.Services;
 using Nest;
 using Npgsql;
+using System.Text;
 using System.Text.Json;
 
 namespace NakitAkis.Controllers
@@ -316,8 +317,8 @@ namespace NakitAkis.Controllers
                 {
                     KaynakKurulus = kaynak_kurulus,
                     FonNo = fm_fonlar,
-                    IhracNo=ihrac_no,
-                    FromDate = DateTime.UtcNow.AddMonths(-6), // 6 aylık veri
+                    IhracNo = ihrac_no,
+                    FromDate = DateTime.Parse("2020-01-01"),
                     ToDate = DateTime.UtcNow
                 });
 
@@ -365,6 +366,442 @@ namespace NakitAkis.Controllers
             {
                 _logger.LogError(ex, "Trends query failed: {error}", ex.Message);
                 return StatusCode(500, new { error = ex.Message });
+            }
+        }
+        [HttpGet("analysis")]
+        [HttpPost("analysis")]
+        public async Task<IActionResult> GetAnalysis([FromQuery] decimal faizOrani = 45,
+                                           [FromQuery] string kaynak_kurulus = "ARZUM",
+                                           [FromQuery] string fm_fonlar = null,
+                                           [FromQuery] string ihrac_no = null)
+        {
+            try
+            {
+                Console.WriteLine($"Analysis with filters: {faizOrani}%, {kaynak_kurulus}, Fon: {fm_fonlar}, Ihrac: {ihrac_no}");
+
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // FİLTRE LOGIC'İ
+                var fonFilter = "";
+                var ihracFilter = "";
+
+                if (!string.IsNullOrEmpty(fm_fonlar) && fm_fonlar != "All" && fm_fonlar != "$__all")
+                {
+                    fonFilter = " AND fon_no::text = @FonNo";
+                }
+
+                if (!string.IsNullOrEmpty(ihrac_no) && ihrac_no != "All" && ihrac_no != "$__all")
+                {
+                    ihracFilter = " AND ihrac_no::text = @IhracNo";
+                }
+
+                // DYNAMIC SQL WITH FILTERS
+                var sql = $@"
+            SELECT 
+                SUM(COALESCE(mevduat_tutari, 0)) as toplam_mevduat,
+                SUM(COALESCE(faiz_tutari, 0)) as gercek_faiz_tutari,
+                COUNT(*) as toplam_islem,
+                AVG(COALESCE(donus_tarihi - baslangic_tarihi, 30)) as ortalama_vade
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus
+              AND COALESCE(mevduat_tutari, 0) > 0
+              AND donus_tarihi > baslangic_tarihi
+              {fonFilter}
+              {ihracFilter}";
+
+                Console.WriteLine($"SQL: {sql}");
+
+                var result = await connection.QueryFirstOrDefaultAsync(sql, new
+                {
+                    KaynakKurulus = kaynak_kurulus,
+                    FonNo = fm_fonlar,
+                    IhracNo = ihrac_no
+                });
+
+                if (result == null)
+                {
+                    Console.WriteLine("No filtered data found");
+                    return Ok(new
+                    {
+                        toplamFaizTutari = 0,
+                        toplamModelFaizTutari = 0,
+                        farkTutari = 0,
+                        farkYuzdesi = 0,
+                        faizOrani = faizOrani,
+                        mesaj = "Filtrelenmiş veri bulunamadı"
+                    });
+                }
+
+                // GRAFANA STYLE HESAPLAMA
+                decimal gercekFaiz = Convert.ToDecimal(result.gercek_faiz_tutari ?? 0);
+                decimal toplamMevduat = Convert.ToDecimal(result.toplam_mevduat ?? 0);
+                double ortalamaVade = Convert.ToDouble(result.ortalama_vade ?? 30);
+
+                // Model faiz = Mevduat * Faiz * (Vade/365)
+                decimal modelFaiz = toplamMevduat * (faizOrani / 100m) * ((decimal)ortalamaVade / 365m);
+
+                decimal fark = gercekFaiz - modelFaiz;
+                double farkYuzde = modelFaiz > 0 ? (double)(fark / modelFaiz * 100) : 0;
+
+                var response = new
+                {
+                    toplamFaizTutari = gercekFaiz,
+                    toplamModelFaizTutari = modelFaiz,
+                    farkTutari = fark,
+                    farkYuzdesi = Math.Round(farkYuzde, 2),
+                    faizOrani = faizOrani,
+                    toplamMevduat = toplamMevduat,
+                    toplamIslem = Convert.ToInt32(result.toplam_islem ?? 0),
+                    ortalamaVade = Math.Round(ortalamaVade, 1),
+                    mesaj = "Filtrelenmiş analiz başarılı"
+                };
+
+                Console.WriteLine($"Filtered Analysis: Gerçek={gercekFaiz}, Model={modelFaiz}, Vade={ortalamaVade} gün");
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Filtered analysis error: {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("export")]
+        public async Task<IActionResult> ExportAnalysis([FromQuery] string level = "basic",
+                                               [FromQuery] string format = "excel",
+                                               [FromQuery] decimal faizOrani = 45,
+                                               [FromQuery] string kaynak_kurulus = "ARZUM",
+                                               [FromQuery] string fm_fonlar = null,
+                                               [FromQuery] string ihrac_no = null)
+        {
+            try
+            {
+                Console.WriteLine($"Export request: Level={level}, Format={format}, {faizOrani}%, {kaynak_kurulus}");
+
+                // Analysis verilerini al
+                var analysisData = await GetAnalysisData(faizOrani, kaynak_kurulus, fm_fonlar, ihrac_no);
+                var trendsData = await GetTrendsDataForExport(kaynak_kurulus, fm_fonlar, ihrac_no);
+
+                if (analysisData == null)
+                {
+                    return BadRequest("Export için veri bulunamadı");
+                }
+
+                // Level'a göre içerik oluştur
+                switch (format.ToLower())
+                {
+                    case "excel":
+                        return await GenerateExcelExport(level, analysisData, trendsData, faizOrani, kaynak_kurulus, fm_fonlar, ihrac_no);
+                    case "pdf":
+                        return await GeneratePDFExport(level, analysisData, trendsData, faizOrani, kaynak_kurulus, fm_fonlar, ihrac_no);
+                    default:
+                        return BadRequest("Geçersiz format. 'excel' veya 'pdf' kullanın.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Export error: {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        // Excel Export Method
+        private async Task<IActionResult> GenerateExcelExport(string level, dynamic analysisData, List<dynamic> trendsData,
+                                                             decimal faizOrani, string kurulus, string fon, string ihrac)
+        {
+            var csvContent = new StringBuilder();
+
+            // Header
+            csvContent.AppendLine("Nakit Akış Analizi Raporu");
+            csvContent.AppendLine($"Export Level,{GetLevelName(level)}");
+            csvContent.AppendLine($"Rapor Tarihi,{DateTime.Now:dd.MM.yyyy HH:mm}");
+            csvContent.AppendLine($"Kuruluş,{kurulus}");
+            csvContent.AppendLine($"Fon,{fon ?? "Tüm Fonlar"}");
+            csvContent.AppendLine($"İhraç,{ihrac ?? "Tüm İhraçlar"}");
+            csvContent.AppendLine($"Model Faiz Oranı,%{faizOrani}"); // DOĞRU FAİZ ORANI
+            csvContent.AppendLine("");
+
+            // Calculate values - FAİZ ORANI DÜZELTİLDİ
+            decimal gercekFaiz = Convert.ToDecimal(analysisData.gercek_faiz_tutari ?? 0);
+            decimal toplamMevduat = Convert.ToDecimal(analysisData.toplam_mevduat ?? 0);
+            double ortalamaVade = Convert.ToDouble(analysisData.ortalama_vade ?? 30);
+            decimal modelFaiz = toplamMevduat * (faizOrani / 100m) * ((decimal)ortalamaVade / 365m); // FAİZ ORANI PARAMETRESİ KULLANILIYOR
+            decimal fark = gercekFaiz - modelFaiz;
+            double farkYuzde = modelFaiz > 0 ? (double)(fark / modelFaiz * 100) : 0;
+
+            // Level 1: Basic - ORTALAMA VADE KALDIRILDI
+            csvContent.AppendLine("=== TEMEL ANALİZ SONUÇLARI ===");
+            csvContent.AppendLine("Metrik,Değer");
+            csvContent.AppendLine($"Toplam Mevduat,₺{toplamMevduat:N2}");
+            csvContent.AppendLine($"Gerçek Faiz Tutarı,₺{gercekFaiz:N2}");
+            csvContent.AppendLine($"Model Faiz Tutarı,₺{modelFaiz:N2}");
+            csvContent.AppendLine($"Fark Tutarı,₺{fark:N2}");
+            csvContent.AppendLine($"Fark Yüzdesi,%{farkYuzde:N2}");
+            csvContent.AppendLine($"Toplam İşlem,{Convert.ToInt32(analysisData.toplam_islem ?? 0)}");
+
+            if (level == "detailed" || level == "full")
+            {
+                // Level 2: Detailed Statistics
+                csvContent.AppendLine("");
+                csvContent.AppendLine("=== DETAYLI İSTATİSTİKLER ===");
+                csvContent.AppendLine("İstatistik,Değer");
+                csvContent.AppendLine($"Faiz Verimliliği,%{((gercekFaiz / toplamMevduat) * 100):N2}");
+                csvContent.AppendLine($"Model Performans Oranı,%{((gercekFaiz / modelFaiz) * 100):N2}");
+                csvContent.AppendLine($"Günlük Ortalama Kazanç,₺{(gercekFaiz / (decimal)ortalamaVade):N2}");
+                csvContent.AppendLine($"İşlem Başına Ortalama,₺{(toplamMevduat / Convert.ToDecimal(analysisData.toplam_islem ?? 1)):N2}");
+
+                // Trends Data - YAKIN TARİHDEN UZAĞA SIRALI
+                if (trendsData?.Count > 0)
+                {
+                    csvContent.AppendLine("");
+                    csvContent.AppendLine("=== HAFTALIK TREND VERİLERİ (Son 10 Hafta) ===");
+                    csvContent.AppendLine("Tarih,Kümülatif Mevduat,Kümülatif Faiz");
+
+                    // YAKIN TARİHDEN UZAĞA SIRALA
+                    var sortedTrends = trendsData.OrderByDescending(t => Convert.ToDateTime(t.timestamp)).Take(10);
+
+                    foreach (var trend in sortedTrends)
+                    {
+                        csvContent.AppendLine($"{Convert.ToDateTime(trend.timestamp):dd.MM.yyyy},₺{Convert.ToDecimal(trend.kumulatif_mevduat):N2},₺{Convert.ToDecimal(trend.kumulatif_faiz_kazanci):N2}");
+                    }
+                }
+            }
+
+            if (level == "full")
+            {
+                // Level 3: Full Analysis - RİSK SEVİYESİ VE VADE YAPISI KALDIRILDI
+                csvContent.AppendLine("");
+                csvContent.AppendLine("=== PERFORMANS DEĞERLENDİRMESİ ===");
+                csvContent.AppendLine("Kategori,Durum,Yorum");
+                csvContent.AppendLine($"Faiz Performansı,{(farkYuzde >= 0 ? "POZITIF" : "NEGATIF")},{(farkYuzde >= 0 ? "Model üzerinde performans" : "Model altında performans")}");
+
+                csvContent.AppendLine("");
+                csvContent.AppendLine("=== AKSİYON ÖNERİLERİ ===");
+                csvContent.AppendLine("Öncelik,Öneri");
+                if (farkYuzde < -5)
+                    csvContent.AppendLine("YÜKSEK,Faiz stratejisi gözden geçirilmeli");
+                if (farkYuzde >= 0)
+                    csvContent.AppendLine("DÜŞÜK,Mevcut stratejiye devam edilebilir");
+                if (Math.Abs(farkYuzde) < 2)
+                    csvContent.AppendLine("BİLGİ,Model ile uyumlu performans");
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(csvContent.ToString());
+            var fileName = $"nakit_akis_{level}_{kurulus}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            return File(bytes, "text/csv", fileName);
+        }
+
+        
+        // PDF Export Method
+        private async Task<IActionResult> GeneratePDFExport(string level, dynamic analysisData, List<dynamic> trendsData,
+                                                           decimal faizOrani, string kurulus, string fon, string ihrac)
+        {
+            // Calculate values - FAİZ ORANI DÜZELTİLDİ
+            decimal gercekFaiz = Convert.ToDecimal(analysisData.gercek_faiz_tutari ?? 0);
+            decimal toplamMevduat = Convert.ToDecimal(analysisData.toplam_mevduat ?? 0);
+            double ortalamaVade = Convert.ToDouble(analysisData.ortalama_vade ?? 30);
+            decimal modelFaiz = toplamMevduat * (faizOrani / 100m) * ((decimal)ortalamaVade / 365m); // FAİZ ORANI PARAMETRESİ
+            decimal fark = gercekFaiz - modelFaiz;
+            double farkYuzde = modelFaiz > 0 ? (double)(fark / modelFaiz * 100) : 0;
+
+            var html = GenerateHTMLReportByLevel(level, gercekFaiz, toplamMevduat, modelFaiz, fark, farkYuzde,
+                                                ortalamaVade, analysisData, trendsData, faizOrani, kurulus, fon, ihrac);
+
+            var bytes = Encoding.UTF8.GetBytes(html);
+            var fileName = $"nakit_akis_{level}_{kurulus}_{DateTime.Now:yyyyMMdd_HHmmss}.html";
+
+            return File(bytes, "text/html", fileName);
+        }
+
+        private string GenerateHTMLReportByLevel(string level, decimal gercekFaiz, decimal toplamMevduat,
+                                        decimal modelFaiz, decimal fark, double farkYuzde, double ortalamaVade,
+                                        dynamic analysisData, List<dynamic> trendsData, decimal faizOrani,
+                                        string kurulus, string fon, string ihrac)
+        {
+            var levelName = GetLevelName(level);
+            var reportTitle = $"💰 Nakit Akış Analizi - {levelName}";
+
+            var html = $@"
+                    <!DOCTYPE html>
+                        <html>
+                        <head>
+                    <meta charset='utf-8'>
+                    <title>{reportTitle}</title>
+                     <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }}
+                .header {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }}
+                 .section {{ margin: 30px 0; }}
+                 .level-badge {{ background: #007bff; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; }}
+                 table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+                 th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+                 th {{ background-color: #f8f9fa; font-weight: bold; }}
+                 .positive {{ color: #28a745; font-weight: bold; }}
+                 .negative {{ color: #dc3545; font-weight: bold; }}
+                 .metric-card {{ background: #f8f9fa; padding: 15px; margin: 10px 0; border-left: 4px solid #007bff; }}
+                 .chart-placeholder {{ background: #e9ecef; padding: 20px; text-align: center; border-radius: 5px; margin: 15px 0; }}
+                     </style>
+                    </head>
+                    <body>
+                 <div class='header'>
+                  <h1>{reportTitle}</h1>
+                  <span class='level-badge'>{levelName}</span>
+                   <p>Rapor Tarihi: {DateTime.Now:dd.MM.yyyy HH:mm}</p>
+                     </div>
+    
+                  <div class='section'>
+                         <h2>📊 Analiz Parametreleri</h2>
+                        <table>
+                           <tr><th>Kuruluş</th><td>{kurulus}</td></tr>
+                              <tr><th>Fon</th><td>{fon ?? "Tüm Fonlar"}</td></tr>
+                               <tr><th>İhraç</th><td>{ihrac ?? "Tüm İhraçlar"}</td></tr>
+                               <tr><th>Model Faiz Oranı</th><td>%{faizOrani}</td></tr>
+                                 <tr><th>Export Level</th><td>{levelName}</td></tr>
+                         </table>
+                      </div>
+    
+    <div class='section'>
+        <h2>💰 Temel Analiz Sonuçları</h2>
+        <div class='metric-card'>
+            <strong>Toplam Mevduat:</strong> ₺{toplamMevduat:N2}
+        </div>
+        <div class='metric-card'>
+            <strong>Gerçek Faiz Tutarı:</strong> ₺{gercekFaiz:N2}
+        </div>
+        <div class='metric-card'>
+            <strong>Model Faiz Tutarı:</strong> ₺{modelFaiz:N2}
+        </div>
+        <div class='metric-card'>
+            <strong>Fark:</strong> <span class='{(fark >= 0 ? "positive" : "negative")}'>₺{fark:N2} (%{farkYuzde:N2})</span>
+        </div>     
+    </div>";
+
+            // Level 2: Detailed
+            if (level == "detailed" || level == "full")
+            {
+                html += $@"
+    <div class='section'>
+        <h2>📈 Detaylı İstatistikler</h2>
+        <table>
+            <tr><th>İstatistik</th><th>Değer</th></tr>
+            <tr><td>Faiz Verimliliği</td><td>%{((gercekFaiz / toplamMevduat) * 100):N2}</td></tr>
+            <tr><td>Model Performans Oranı</td><td>%{((gercekFaiz / modelFaiz) * 100):N2}</td></tr>
+            <tr><td>Günlük Ortalama Kazanç</td><td>₺{(gercekFaiz / (decimal)ortalamaVade):N2}</td></tr>
+            <tr><td>İşlem Başına Ortalama</td><td>₺{(toplamMevduat / Convert.ToDecimal(analysisData.toplam_islem ?? 1)):N2}</td></tr>
+        </table>";
+
+                if (trendsData?.Count > 0)
+                {
+                    html += $@"
+        <h3>📊 Haftalık Trend Verileri (Son 5 Hafta)</h3>
+        <table>
+            <tr><th>Tarih</th><th>Kümülatif Mevduat</th><th>Kümülatif Faiz</th></tr>";
+
+                    foreach (var trend in trendsData.Take(5))
+                    {
+                        html += $@"<tr>
+                    <td>{Convert.ToDateTime(trend.timestamp):dd.MM.yyyy}</td>
+                    <td>₺{Convert.ToDecimal(trend.kumulatif_mevduat):N2}</td>
+                    <td>₺{Convert.ToDecimal(trend.kumulatif_faiz_kazanci):N2}</td>
+                </tr>";
+                    }
+                    html += "</table>";
+                }
+                html += "</div>";
+            }
+
+            // Level 3: Full Report
+            if (level == "full")
+            {
+                html += $@"
+<div class='section'>
+    <h2>🎯 Performans Değerlendirmesi</h2>
+    <div class='metric-card'>
+        <strong>Faiz Performansı:</strong> <span class='{(farkYuzde >= 0 ? "positive" : "negative")}'>{(farkYuzde >= 0 ? "POZİTİF" : "NEGATİF")}</span>
+        <br><strong>Açıklama:</strong> {(farkYuzde >= 0 ? "Model üzerinde performans" : "Model altında performans")}
+    </div>
+</div>
+
+<div class='section'>
+    <h2>🔍 Aksiyon Önerileri</h2>
+    <div class='metric-card'>";
+
+                if (farkYuzde < -5)
+                    html += "<strong>🚨 YÜKSEK ÖNCELİK:</strong> Faiz stratejisi gözden geçirilmeli<br>";
+                if (farkYuzde >= 0)
+                    html += "<strong>✅ DÜŞÜK ÖNCELİK:</strong> Mevcut stratejiye devam edilebilir<br>";
+                if (Math.Abs(farkYuzde) < 2)
+                    html += "<strong>📊 BİLGİ:</strong> Model ile uyumlu performans<br>";
+
+                html += @"
+    </div>
+</div>";
+            }
+
+            html += @"
+</body>
+</html>";
+
+            return html;
+        }
+
+        // Helper Methods
+        private string GetLevelName(string level)
+        {
+            return level switch
+            {
+                "basic" => "📋 Basit Özet",
+                "detailed" => "📊 Detaylı Analiz",
+                "full" => "📈 Tam Rapor",
+                _ => "Bilinmeyen"
+            };
+        }
+
+        private async Task<List<dynamic>> GetTrendsDataForExport(string kurulus, string fon, string ihrac)
+        {
+            try
+            {
+                // GetTrends method'u IActionResult döndürüyor, biz data'ya ihtiyacımız var
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                var fonFilter = string.IsNullOrEmpty(fon) || fon == "All" || fon == "$__all" ? "" : " AND fon_no::text = @FonNo";
+                var ihracFilter = string.IsNullOrEmpty(ihrac) || ihrac == "All" || ihrac == "$__all" ? "" : " AND ihrac_no::text = @IhracNo";
+
+                // Basit trends query
+                var sql = $@"
+            SELECT 
+                DATE_TRUNC('week', baslangic_tarihi) as timestamp,
+                SUM(COALESCE(mevduat_tutari, 0)) as kumulatif_mevduat,
+                SUM(COALESCE(faiz_tutari, 0)) as kumulatif_faiz_kazanci
+            FROM nakit_akis 
+            WHERE kaynak_kurulus = @KaynakKurulus
+              AND baslangic_tarihi >= @FromDate
+              AND baslangic_tarihi <= @ToDate
+              {fonFilter}
+              {ihracFilter}
+            GROUP BY DATE_TRUNC('week', baslangic_tarihi)
+            ORDER BY timestamp DESC
+            LIMIT 10";
+
+                var result = await connection.QueryAsync<dynamic>(sql, new
+                {
+                    KaynakKurulus = kurulus,
+                    FonNo = fon,
+                    IhracNo = ihrac,
+                    FromDate = DateTime.Now.AddMonths(-6),
+                    ToDate = DateTime.Now
+                });
+
+                return result.ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Trends data error: {ex.Message}");
+                return new List<dynamic>();
             }
         }
 
@@ -568,8 +1005,8 @@ namespace NakitAkis.Controllers
                                 {
                                     text = $"İhraç {i.IhracNo} (₺{i.ToplamTutar:N0} - {i.KayitSayisi} kayıt)",
                                     value = i.IhracNo,
-                                    tutar = i.ToplamTutar, // Debug için ekle
-                                    kayit = i.KayitSayisi  // Debug için ekle
+                                    tutar = i.ToplamTutar, 
+                                    kayit = i.KayitSayisi  
                                 }).ToList();
 
                                 // Debug log ekle
@@ -636,6 +1073,41 @@ namespace NakitAkis.Controllers
                 _logger.LogError(ex, "Grafana annotations failed");
                 return BadRequest(new { error = ex.Message });
             }
+        }
+
+        
+        private async Task<dynamic> GetAnalysisData(decimal faizOrani, string kaynak_kurulus, string fm_fonlar, string ihrac_no)
+        {
+            var connectionString = _configuration.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            var fonFilter = !string.IsNullOrEmpty(fm_fonlar) && fm_fonlar != "All" && fm_fonlar != "$__all" ?
+                " AND fon_no::text = @FonNo" : "";
+            var ihracFilter = !string.IsNullOrEmpty(ihrac_no) && ihrac_no != "All" && ihrac_no != "$__all" ?
+                " AND ihrac_no::text = @IhracNo" : "";
+
+            var sql = $@"
+        SELECT 
+            SUM(COALESCE(mevduat_tutari, 0)) as toplam_mevduat,
+            SUM(COALESCE(faiz_tutari, 0)) as gercek_faiz_tutari,
+            COUNT(*) as toplam_islem,
+            AVG(COALESCE(donus_tarihi - baslangic_tarihi, 30)) as ortalama_vade
+        FROM nakit_akis 
+        WHERE kaynak_kurulus = @KaynakKurulus
+          AND COALESCE(mevduat_tutari, 0) > 0
+          AND donus_tarihi > baslangic_tarihi
+          {fonFilter}
+          {ihracFilter}";
+
+            var result = await connection.QueryFirstOrDefaultAsync(sql, new
+            {
+                KaynakKurulus = kaynak_kurulus,
+                FonNo = fm_fonlar,
+                IhracNo = ihrac_no
+            });
+
+            return result; // Direkt result döndür, IActionResult değil
         }
 
         private async Task<GrafanaQueryResult> ProcessTarget(GrafanaTarget target, GrafanaRange range)
