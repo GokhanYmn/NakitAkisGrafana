@@ -114,62 +114,181 @@ app.UseAuthorization();
 // API Controllers
 app.MapControllers();
 
-// Welcome page for root path
-app.MapGet("/", () => Results.Content($@"
+// Welcome page for root path - UTF-8 Türkçe Destekli
+app.MapGet("/", () => Results.Text($@"
 <!DOCTYPE html>
 <html lang='tr'>
 <head>
-    <title>NakitAkış API</title>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>NakitAkış API - Ana Sayfa</title>
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }}
-        .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        h1 {{ color: #007bff; }}
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 40px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }}
+        .container {{ 
+            max-width: 700px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }}
+        h1 {{ 
+            color: #2c3e50; 
+            text-align: center;
+            margin-bottom: 10px;
+        }}
+        .subtitle {{
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-style: italic;
+        }}
         .links {{ margin: 20px 0; }}
-        .links a {{ display: block; margin: 10px 0; padding: 10px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; text-align: center; }}
-        .links a:hover {{ background: #0056b3; }}
-        .status {{ background: #d4edda; padding: 15px; border-radius: 4px; margin: 20px 0; }}
-        code {{ background: #f8f9fa; padding: 10px; display: block; border-radius: 4px; margin: 10px 0; }}
+        .links a {{ 
+            display: block; 
+            margin: 8px 0; 
+            padding: 12px; 
+            background: linear-gradient(45deg, #3498db, #2980b9); 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            text-align: center;
+            transition: transform 0.2s ease;
+        }}
+        .links a:hover {{ 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }}
+        .status {{ 
+            background: linear-gradient(45deg, #2ecc71, #27ae60); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 20px 0;
+            color: white;
+            text-align: center;
+        }}
+        .section {{
+            margin: 25px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }}
+        code {{ 
+            background: #2c3e50; 
+            color: #ecf0f1;
+            padding: 15px; 
+            display: block; 
+            border-radius: 6px; 
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            white-space: pre-line;
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        .info-card {{
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }}
+        .emoji {{
+            font-size: 1.2em;
+            margin-right: 8px;
+        }}
     </style>
 </head>
 <body>
     <div class='container'>
-        <h1>🚀 NakitAkış API Server</h1>
+        <h1>🚀 NakitAkış API Sunucusu</h1>
+        <p class='subtitle'>Nakit Akış Analizi ve Dashboard API Sistemi</p>
+        
         <div class='status'>
-            ✅ <strong>API Server is running!</strong><br>
-            🕐 Started at: {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+            <span class='emoji'>✅</span><strong>API Sunucusu Çalışıyor!</strong><br>
+            <span class='emoji'>🕐</span>Başlatılma Zamanı: {DateTime.Now:dd.MM.yyyy HH:mm:ss}<br>
+            <span class='emoji'>🗄️</span>Veritabanı: PostgreSQL Bağlantısı Aktif
         </div>
         
-        <h3>📋 Available Endpoints:</h3>
-        <div class='links'>
-            <a href='/swagger'>📖 Swagger UI - API Documentation</a>
-            <a href='/health'>❤️ Health Check</a>
-            <a href='/hangfire'>⚙️ Hangfire Dashboard</a>
-            <a href='/api/grafana/variables/kaynak-kurulus'>🏢 Test API - Kaynak Kuruluş</a>
+        <div class='section'>
+            <h3><span class='emoji'>📋</span>Mevcut API Endpoints:</h3>
+            <div class='links'>
+                <a href='/swagger'><span class='emoji'>📖</span>Swagger UI - API Dokümantasyonu</a>
+                <a href='/health'><span class='emoji'>❤️</span>Sistem Sağlık Kontrolü</a>
+                <a href='/hangfire'><span class='emoji'>⚙️</span>Hangfire Job Dashboard</a>
+                <a href='/api/grafana/variables/kaynak-kurulus'><span class='emoji'>🏢</span>Test API - Kaynak Kuruluş Listesi</a>
+            </div>
         </div>
         
-        <h3>🔗 Frontend Applications:</h3>
-        <div class='links'>
-            <a href='http://localhost:3000/d/853acffc-686e-4bf1-882c-095f21c237ee/nakit-akis-analizi-dashboard?orgId=1&from=now-6M&to=now&timezone=browser&var-kaynak_kurulus=TARF%C4%B0N&var-fm_fonlar=&var-ihrac_no=' target='_blank'>📊 Grafana Dashboard</a>
-            <a href='http://localhost:3001' target='_blank'>⚛️ React Frontend</a>
+        <div class='section'>
+            <h3><span class='emoji'>🔗</span>Frontend Uygulamaları:</h3>
+            <div class='links'>
+                <a href='http://localhost:3000/d/853acffc-686e-4bf1-882c-095f21c237ee/nakit-akis-analizi-dashboard?orgId=1&from=now-6M&to=now&timezone=browser&var-kaynak_kurulus=&var-fm_fonlar=&var-ihrac_no=' target='_blank'><span class='emoji'>📊</span>Grafana Dashboard</a>
+                <a href='http://localhost:3001' target='_blank'><span class='emoji'>⚛️</span>React Frontend Uygulaması</a>
+            </div>
         </div>
         
-        <h3>📊 Quick API Test:</h3>
-        <p>Test your API with these URLs:</p>
-        <code>
-            GET /api/health<br>
-            GET /api/grafana/variables/kaynak-kurulus<br>
-            GET /api/grafana/analysis?faizOrani=15&kaynak_kurulus=FIBABANKA
-        </code>
+        <div class='section'>
+            <h3><span class='emoji'>📊</span>API Test Örnekleri:</h3>
+            <p>Bu URL'lerle API'nizi test edebilirsiniz:</p>
+            <code>GET /api/health
+GET /api/grafana/variables/kaynak-kurulus  
+GET /api/grafana/variables/fonlar?kaynak_kurulus=FIBABANKA
+GET /api/grafana/analysis?faizOrani=15&kaynak_kurulus=FIBABANKA</code>
+        </div>
         
-        <h3>🎯 Port Information:</h3>
-        <ul>
-            <li><strong>API Server:</strong> http://localhost:7289</li>
-            <li><strong>React Frontend:</strong> http://localhost:3001</li>
-            <li><strong>Grafana:</strong> http://localhost:3000</li>
-        </ul>
+        <div class='section'>
+            <h3><span class='emoji'>🎯</span>Port Bilgileri:</h3>
+            <div class='info-grid'>
+                <div class='info-card'>
+                    <strong>🔌 API Sunucusu</strong><br>
+                    <code style='background: #3498db; color: white; padding: 5px; border-radius: 3px;'>http://localhost:7289</code>
+                </div>
+                <div class='info-card'>
+                    <strong>⚛️ React Frontend</strong><br>
+                    <code style='background: #e74c3c; color: white; padding: 5px; border-radius: 3px;'>http://localhost:3001</code>
+                </div>
+                <div class='info-card'>
+                    <strong>📊 Grafana</strong><br>
+                    <code style='background: #f39c12; color: white; padding: 5px; border-radius: 3px;'>http://localhost:3000</code>
+                </div>
+                <div class='info-card'>
+                    <strong>🗄️ PostgreSQL</strong><br>
+                    <code style='background: #9b59b6; color: white; padding: 5px; border-radius: 3px;'>192.168.182.3:5432</code>
+                </div>
+            </div>
+        </div>
+        
+        <div class='section'>
+            <h3><span class='emoji'>🌟</span>Sistem Özellikleri:</h3>
+            <ul style='list-style: none; padding: 0;'>
+                <li><span class='emoji'>✅</span>Nakit Akış Analizi API'leri</li>
+                <li><span class='emoji'>✅</span>Grafana Dashboard Entegrasyonu</li>
+                <li><span class='emoji'>✅</span>React Frontend Desteği</li>
+                <li><span class='emoji'>✅</span>Export (Excel/PDF) İşlemleri</li>
+                <li><span class='emoji'>✅</span>Hangfire Background Jobs</li>
+                <li><span class='emoji'>✅</span>CORS Desteği</li>
+                <li><span class='emoji'>✅</span>Serilog Logging</li>
+                <li><span class='emoji'>✅</span>Health Checks</li>
+            </ul>
+        </div>
+        
+        <div style='text-align: center; margin-top: 30px; padding: 20px; background: #34495e; color: white; border-radius: 6px;'>
+            <p><strong>🎯 NakitAkış Dashboard Suite v1.0</strong></p>
+            <p>React + .NET API + PostgreSQL + Grafana</p>
+            <small>Geliştirici: Gökhan Yaman | {DateTime.Now:yyyy}</small>
+        </div>
     </div>
 </body>
-</html>", "text/html"));
+</html>", "text/html; charset=utf-8"));
 
 
 // Health Checks

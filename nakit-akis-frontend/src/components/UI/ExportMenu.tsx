@@ -38,64 +38,65 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ analysisData, filters }) => {
   ];
 
   const handleExport = async (level: string, format: 'excel' | 'pdf') => {
-  setLoading(`${level}-${format}`);
-  try {
-    console.log(`Exporting ${level} as ${format}...`);
-    
-    const params = new URLSearchParams({
-      level: level,
-      format: format,
-      faizOrani: filters.faizOrani.toString(),
-      kaynak_kurulus: filters.kaynakKurulus,
-      ...(filters.fonNo && { fm_fonlar: filters.fonNo }),
-      ...(filters.ihracNo && { ihrac_no: filters.ihracNo })
-    });
+    setLoading(`${level}-${format}`);
+    try {
+      console.log(`Exporting ${level} as ${format}...`);
+      
+      const params = new URLSearchParams({
+        level: level,
+        format: format,
+        faizOrani: filters.faizOrani.toString(),
+        kaynak_kurulus: filters.kaynakKurulus,
+        ...(filters.fonNo && { fm_fonlar: filters.fonNo }),
+        ...(filters.ihracNo && { ihrac_no: filters.ihracNo })
+      });
 
-    const url = `http://localhost:7289/api/grafana/export?${params}`;
-    console.log('Export URL:', url);
+      const url = `http://localhost:7289/api/grafana/export?${params}`;
+      console.log('Export URL:', url);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': format === 'excel' ? 'text/csv' : 'text/html',
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': format === 'excel' ? 'text/csv' : 'text/html',
+        }
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      if (response.ok) {
+        const blob = await response.blob();
+        console.log('Blob size:', blob.size);
+        
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `nakit_akis_${level}_${filters.kaynakKurulus}_${new Date().toISOString().slice(0,10)}.${format === 'excel' ? 'csv' : 'html'}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+        
+        console.log('Export başarılı!');
+      } else {
+        const errorText = await response.text();
+        console.error('Export failed - Status:', response.status);
+        console.error('Export failed - Response:', errorText);
+        alert(`Export hatası: ${response.status} - ${errorText}`);
       }
-    });
-
-    console.log('Response status:', response.status);
-    console.log('Response headers:', response.headers);
-
-    if (response.ok) {
-      const blob = await response.blob();
-      console.log('Blob size:', blob.size);
-      
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `nakit_akis_${level}_${filters.kaynakKurulus}_${new Date().toISOString().slice(0,10)}.${format === 'excel' ? 'csv' : 'html'}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
-      
-      console.log('Export başarılı!');
-    } else {
-      const errorText = await response.text();
-      console.error('Export failed - Status:', response.status);
-      console.error('Export failed - Response:', errorText);
-      alert(`Export hatası: ${response.status} - ${errorText}`);
+    } catch (error: any) {
+      console.error('Export error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        url: `http://localhost:7289/api/grafana/export`
+      });
+      alert(`Export hatası: ${error.message}`);
+    } finally {
+      setLoading(null);
     }
-  } catch (error: any) {
-    console.error('Export error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      url: `http://localhost:7289/api/grafana/export`
-    });
-    alert(`Export hatası: ${error.message}`);
-  } finally {
-    setLoading(null);
-  }
-};
+  };
+
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -164,43 +165,44 @@ const ExportMenu: React.FC<ExportMenuProps> = ({ analysisData, filters }) => {
                 </div>
               </div>
               
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => handleExport(level.id, 'excel')}
-                  disabled={loading === `${level.id}-excel`}
-                  style={{
-                    flex: 1,
-                    padding: '6px 12px',
-                    backgroundColor: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  {loading === `${level.id}-excel` ? '⏳' : '📊'} Excel
-                </button>
-                
+              {/* SADECE PDF EXPORT BUTONU */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                 <button
                   onClick={() => handleExport(level.id, 'pdf')}
                   disabled={loading === `${level.id}-pdf`}
                   style={{
                     flex: 1,
-                    padding: '6px 12px',
+                    padding: '8px 16px',
                     backgroundColor: '#dc3545',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '12px'
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    minWidth: '120px'
                   }}
                 >
-                  {loading === `${level.id}-pdf` ? '⏳' : '📄'} PDF
+                  {loading === `${level.id}-pdf` ? '⏳ İndiriliyor...' : '📄 PDF İndir'}
                 </button>
               </div>
+              
+              {/* EXCEL BUTONU KALDIRILDI */}
+              {/* Excel backend kodları duruyor, sadece UI'den kaldırıldı */}
             </div>
           ))}
+          
+          {/* Bilgi notu */}
+          <div style={{
+            padding: '8px 12px',
+            fontSize: '11px',
+            color: theme.colors.textSecondary,
+            textAlign: 'center',
+            borderTop: `1px solid ${theme.colors.border}`,
+            fontStyle: 'italic'
+          }}>
+            💡 Excel export geçici olarak devre dışı
+          </div>
         </div>
       )}
     </div>

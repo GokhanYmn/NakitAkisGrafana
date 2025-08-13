@@ -211,6 +211,9 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({
               }}>
                 ₺{analysisData.toplamFaizTutari.toLocaleString('tr-TR')}
               </p>
+              <small style={{ color: theme.colors.textSecondary }}>
+                (Gerçek oran: %{(analysisData.toplamFaizTutari / (analysisData.toplamMevduatTutari || 1) * 100).toFixed(2)})
+             </small>
             </div>
 
             {/* Model Faiz Tutarı */}

@@ -196,7 +196,7 @@ namespace NakitAkis.Controllers
             }
         }
 
-        // Helper method ekleyin
+        // Helper method
         private TimeSpan ParseGrafanaTimeRange(string range)
         {
             // "now-6M", "now-30d", "now-24h" formatlarını parse et
@@ -1119,7 +1119,7 @@ namespace NakitAkis.Controllers
                 KaynakKurulus = "FİBABANKA"
             };
 
-            // Target'dan parametreleri parse et
+            // Target'dan parametreleri parse etme
             if (target.Params != null)
             {
                 if (target.Params.ContainsKey("faizOrani") && decimal.TryParse(target.Params["faizOrani"], out var faizOrani))
