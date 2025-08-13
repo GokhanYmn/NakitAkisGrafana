@@ -331,9 +331,9 @@ const AdvancedVariableSelector: React.FC<AdvancedVariableSelectorProps> = ({ onS
               fontWeight: 'bold',
               color: theme.colors.text
             }}>
-              📥 Export:
+              📥 Analizi Yazdır:
             </label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               {!analysisData && (
                 <button
                   onClick={handleQuickAnalysis}
