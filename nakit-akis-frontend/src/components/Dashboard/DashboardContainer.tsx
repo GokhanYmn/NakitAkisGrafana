@@ -48,7 +48,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
             break;
 
            case 'cash-flow-analysis': 
-            const cashFlowData = await NakitAkisApi.getCashFlowAnalysis(currentPeriod, 100);
+            const cashFlowData = await NakitAkisApi.getCashFlowAnalysis(currentPeriod, 200);
              setData(cashFlowData);
               break;
 
@@ -177,7 +177,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
         setCurrentPeriod(period); 
         setLoading(true);
         try {
-          const newData = await NakitAkisApi.getCashFlowAnalysis(period, 100);
+          const newData = await NakitAkisApi.getCashFlowAnalysis(period, 200);
           setData(newData);
         } catch (error) {
           console.error('Period change error:', error);

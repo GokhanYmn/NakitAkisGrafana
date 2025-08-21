@@ -62,10 +62,10 @@ namespace NakitAkis.Controllers
                 using var connection = new NpgsqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                // Period'a göre gruplamayı belirle
+                // Period'a göre DATE_TRUNC belirle
                 string dateTrunc = period switch
                 {
-                    "day" => "day",      // GÜNLÜK EKLENDİ
+                    "day" => "day",
                     "week" => "week",
                     "month" => "month",
                     "quarter" => "quarter",
@@ -73,66 +73,27 @@ namespace NakitAkis.Controllers
                     _ => "month"
                 };
 
+                // TEK QUERY - SADECE DATE_TRUNC İLE GRUPLAMA
                 var sql = $@"
-        WITH cash_flow_data AS (
-            SELECT 
-                DATE_TRUNC('{dateTrunc}', tarih) as period_date,
-                SUM(COALESCE(anapara, 0))::float8 as total_anapara,
-                SUM(COALESCE(basit_faiz, 0))::float8 as total_basit_faiz,
-                SUM(COALESCE(faiz_kznc, 0))::float8 as total_faiz_kazanci,
-                SUM(COALESCE(model_nema_orani, 0) * COALESCE(anapara, 0) / 100.0)::float8 as total_model_faiz,
-                SUM(COALESCE(model_faiz_kznc, 0))::float8 as total_model_faiz_kazanci,
-                SUM(COALESCE(tlref_faiz, 0) * COALESCE(anapara, 0))::float8 as total_tlref_faiz,
-                SUM(COALESCE(tlref_faiz_kazanci, 0))::float8 as total_tlref_kazanci,
-                COUNT(*) as record_count,
-                AVG(COALESCE(model_nema_orani, 0))::float8 as avg_model_nema_orani,
-                AVG(COALESCE(tlref_faiz, 0))::float8 as avg_tlref_faiz,
-                AVG(COALESCE(basit_faiz, 0))::float8 as avg_basit_faiz -- BASİT FAİZ ORTALAMASI EKLENDİ
-            FROM cash_flow_analysis 
-            WHERE tarih IS NOT NULL 
-              AND anapara > 0
-            GROUP BY DATE_TRUNC('{dateTrunc}', tarih)
-        )
         SELECT 
-            period_date,
-            total_anapara,
-            total_basit_faiz,
-            total_faiz_kazanci,
-            total_model_faiz,
-            total_model_faiz_kazanci,
-            total_tlref_faiz,
-            total_tlref_kazanci,
-            record_count,
-            avg_model_nema_orani,
-            avg_tlref_faiz,
-            avg_basit_faiz, -- BASİT FAİZ ORTALAMASI EKLENDİ
-            -- ANAPARA İLE FAİZ KAZANÇLARI (YENİ)
-            CASE 
-                WHEN total_anapara > 0 THEN (total_faiz_kazanci / total_anapara * 100)::float8
-                ELSE 0.0 
-            END as basit_faiz_yield_percentage,
-            CASE 
-                WHEN total_anapara > 0 THEN (total_model_faiz_kazanci / total_anapara * 100)::float8
-                ELSE 0.0 
-            END as model_faiz_yield_percentage,
-            CASE 
-                WHEN total_anapara > 0 THEN (total_tlref_kazanci / total_anapara * 100)::float8
-                ELSE 0.0 
-            END as tlref_faiz_yield_percentage,
-            -- Performans oranları
-            CASE 
-                WHEN total_model_faiz_kazanci > 0 THEN 
-                    ((total_faiz_kazanci - total_model_faiz_kazanci) / total_model_faiz_kazanci * 100)::float8
-                ELSE 0.0 
-            END as basit_vs_model_performance,
-            CASE 
-                WHEN total_tlref_kazanci > 0 THEN 
-                    ((total_faiz_kazanci - total_tlref_kazanci) / total_tlref_kazanci * 100)::float8
-                ELSE 0.0 
-            END as basit_vs_tlref_performance
-        FROM cash_flow_data
-        WHERE period_date IS NOT NULL
-        ORDER BY period_date ASC
+            DATE_TRUNC('{dateTrunc}', tarih) as period_date,
+            -- VERİLERİ OLDUĞU GİBİ AL, FAZLA TOPLAMA YAPMA
+            AVG(COALESCE(anapara, 0))::float8 as total_anapara,
+            AVG(COALESCE(basit_faiz, 0))::float8 as total_basit_faiz,
+            AVG(COALESCE(faiz_kznc, 0))::float8 as total_faiz_kazanci,
+            AVG(COALESCE(model_faiz_kznc, 0))::float8 as total_model_faiz_kazanci,
+            AVG(COALESCE(tlref_faiz_kazanci, 0))::float8 as total_tlref_kazanci,
+            COUNT(*) as record_count,
+            AVG(COALESCE(model_nema_orani, 0))::float8 as avg_model_nema_orani,
+            AVG(COALESCE(tlref_faiz, 0))::float8 as avg_tlref_faiz,
+            AVG(COALESCE(basit_faiz, 0))::float8 as avg_basit_faiz,
+            0.0 as total_model_faiz,
+            0.0 as total_tlref_faiz
+        FROM cash_flow_analysis 
+        WHERE tarih IS NOT NULL 
+          AND anapara > 0
+        GROUP BY DATE_TRUNC('{dateTrunc}', tarih)
+        ORDER BY DATE_TRUNC('{dateTrunc}', tarih) ASC
         LIMIT @Limit";
 
                 var result = await connection.QueryAsync<dynamic>(sql, new { Limit = limit });
@@ -151,34 +112,37 @@ namespace NakitAkis.Controllers
                     timestamp = ((DateTimeOffset)((DateTime)r.period_date)).ToUnixTimeMilliseconds(),
                     period = ((DateTime)r.period_date).ToString("yyyy-MM-dd"),
 
-                    // Ana Para
+                    // SADECE CONVERT ET, HESAPLAMA YAPMA
                     total_anapara = SafeConvertToDouble(r.total_anapara),
-
-                    // Basit Faiz
                     total_basit_faiz = SafeConvertToDouble(r.total_basit_faiz),
                     total_faiz_kazanci = SafeConvertToDouble(r.total_faiz_kazanci),
-                    avg_basit_faiz = SafeConvertToDouble(r.avg_basit_faiz), // YENİ
-
-                    // Model Faiz
+                    avg_basit_faiz = SafeConvertToDouble(r.avg_basit_faiz),
                     total_model_faiz = SafeConvertToDouble(r.total_model_faiz),
                     total_model_faiz_kazanci = SafeConvertToDouble(r.total_model_faiz_kazanci),
                     avg_model_nema_orani = SafeConvertToDouble(r.avg_model_nema_orani),
-
-                    // TLREF Faiz
                     total_tlref_faiz = SafeConvertToDouble(r.total_tlref_faiz),
                     total_tlref_kazanci = SafeConvertToDouble(r.total_tlref_kazanci),
                     avg_tlref_faiz = SafeConvertToDouble(r.avg_tlref_faiz),
 
-                    // ANAPARA - FAİZ VERİMLİLİK ORANLARI (YENİ)
-                    basit_faiz_yield_percentage = SafeConvertToDouble(r.basit_faiz_yield_percentage),
-                    model_faiz_yield_percentage = SafeConvertToDouble(r.model_faiz_yield_percentage),
-                    tlref_faiz_yield_percentage = SafeConvertToDouble(r.tlref_faiz_yield_percentage),
+                    // VERİMLİLİK HESAPLAMALARI - FRONTEND'DE YAPILACAK
+                    basit_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
+                        ? (SafeConvertToDouble(r.total_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
+                        : 0.0,
+                    model_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
+                        ? (SafeConvertToDouble(r.total_model_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
+                        : 0.0,
+                    tlref_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
+                        ? (SafeConvertToDouble(r.total_tlref_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
+                        : 0.0,
 
-                    // Performans
-                    basit_vs_model_performance = SafeConvertToDouble(r.basit_vs_model_performance),
-                    basit_vs_tlref_performance = SafeConvertToDouble(r.basit_vs_tlref_performance),
+                    // PERFORMANS HESAPLAMALARI
+                    basit_vs_model_performance = SafeConvertToDouble(r.total_model_faiz_kazanci) > 0
+                        ? ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_model_faiz_kazanci)) / SafeConvertToDouble(r.total_model_faiz_kazanci) * 100)
+                        : 0.0,
+                    basit_vs_tlref_performance = SafeConvertToDouble(r.total_tlref_kazanci) > 0
+                        ? ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_tlref_kazanci)) / SafeConvertToDouble(r.total_tlref_kazanci) * 100)
+                        : 0.0,
 
-                    // Meta
                     record_count = Convert.ToInt32(r.record_count ?? 0),
                     period_type = period
                 }).ToArray();

@@ -163,10 +163,10 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       {
         label: '📊 TLREF Faiz Kazancı (₺)',
         data: data.map((item: CashFlowAnalysisData) => item.total_tlref_kazanci),
-        borderColor: '#6f42c1',
+        borderColor: '#fa0505ff',
         backgroundColor: 'rgba(111, 66, 193, 0.1)',
         borderWidth: 3,
-        pointBackgroundColor: '#6f42c1',
+        pointBackgroundColor: '#fa0505ff',
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2,
         pointRadius: 6,
@@ -276,7 +276,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           padding: 20,
           color: theme.colors.text,
           font: {
-            size: 12,
+            size: 15,
             weight: 'bold' as const
           }
         }
@@ -284,9 +284,9 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       title: {
         display: true,
         text: selectedMetric === 'anapara' 
-          ? '💰 Cash Flow Analizi - Anapara Dağılımı'
+          ? '💰 Cash Flow Analizi - Koçfinans - Anapara Dağılımı'
           : selectedMetric === 'kazanc'
-          ? '💹 Cash Flow Analizi - Faiz Kazançları'
+          ? '💹 Cash Flow Analizi - Koçfinans - Faiz Kazançları'
           : selectedMetric === 'verimlilik'
           ? '📊 Cash Flow Analizi - Anapara Verimliliği (%)'
           : '📊 Cash Flow Analizi - Performans Karşılaştırma',
@@ -547,7 +547,20 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
         justifyContent: 'center',
         flexWrap: 'wrap'
       }}>
-        
+         <button
+          onClick={() => setSelectedMetric('anapara')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: selectedMetric === 'anapara' ? theme.colors.warning : theme.colors.background,
+            color: selectedMetric === 'anapara' ? 'white' : theme.colors.text,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          💰 Anapara
+        </button>
         <button
           onClick={() => setSelectedMetric('kazanc')}
           style={{
@@ -562,7 +575,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
         >
           💹 Faiz Kazançları
         </button>
-        <button
+       {/*} <button
           onClick={() => setSelectedMetric('verimlilik')}
           style={{
             padding: '10px 20px',
@@ -589,9 +602,9 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           }}
         >
           📈 Performans (%)
-        </button>
-      </div>
-
+        </button>*/}
+      </div> 
+    
       {/* Özet kartlar - 4 KART (ANAPARA KALDIRILDI) */}
       <div style={{ 
         marginBottom: '20px',
@@ -609,7 +622,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.colors.success }}>
             ₺{totalBasitKazanc.toLocaleString('tr-TR')}
           </div>
-          <div style={{ fontSize: '12px', color: theme.colors.text }}>Basit Faiz Kazancı</div>
+          <div style={{ fontSize: '14px', color: theme.colors.text }}>Basit Faiz Kazancı</div>
         </div>
         
         <div style={{ 
@@ -622,7 +635,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.colors.primary }}>
             ₺{totalModelKazanc.toLocaleString('tr-TR')}
           </div>
-          <div style={{ fontSize: '12px', color: theme.colors.text }}>Model Faiz Kazancı</div>
+          <div style={{ fontSize: '14px', color: theme.colors.text }}>Model Faiz Kazancı</div>
         </div>
         
         <div style={{ 
@@ -635,7 +648,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.colors.error }}>
             ₺{totalTlrefKazanc.toLocaleString('tr-TR')}
           </div>
-          <div style={{ fontSize: '12px', color: theme.colors.text }}>TLREF Faiz Kazancı</div>
+          <div style={{ fontSize: '14px', color: theme.colors.text }}>TLREF Faiz Kazancı</div>
         </div>
         
         <div style={{ 
@@ -652,7 +665,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           }}>
             {avgModelPerformance >= 0 ? '+' : ''}{avgModelPerformance.toFixed(1)}%
           </div>
-          <div style={{ fontSize: '12px', color: theme.colors.text }}>Ort. Model Performans</div>
+          <div style={{ fontSize: '14px', color: theme.colors.text }}>Ort. Model Performans</div>
         </div>
       </div>
 
@@ -670,7 +683,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       {/* Veri bilgisi */}
       <div style={{ 
         marginTop: '20px',
-        fontSize: '12px',
+        fontSize: '16px',
         color: theme.colors.textSecondary,
         textAlign: 'center'
       }}>
