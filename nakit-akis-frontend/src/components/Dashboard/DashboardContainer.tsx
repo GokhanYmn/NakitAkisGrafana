@@ -9,7 +9,7 @@ interface DashboardContainerProps {
   kaynakKurulus: string;
   fonNo: string;
   ihracNo: string;
-  faizOrani: number; // EKLENDI - NULL OLMAZ ÇÜNKÜ APP.TSX'DE KONTROL EDİLDİ
+  faizOrani: number; 
 }
 
 const DashboardContainer: React.FC<DashboardContainerProps> = ({
