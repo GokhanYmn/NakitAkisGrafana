@@ -7,7 +7,8 @@ import {
   IhracBilgi,
   AnalysisData,
   HistoricalData,
-  NakitAkisParametre 
+  NakitAkisParametre,
+  CashFlowAnalysisData 
 } from '../types/nakitAkis';
 
 // Base URL - Backend API adresin
@@ -154,6 +155,28 @@ static async getTrends(kaynakKurulus: string, fonNo?: string, ihracNo?: string):
 
   }
 
+static async getCashFlowAnalysis(period: string = 'month', limit: number = 100): Promise<CashFlowAnalysisData[]> {
+  try {
+    console.log('API Call - getCashFlowAnalysis:', { period, limit });
+    
+    const params = {
+      period: period,
+      limit: limit.toString()
+    };
+    
+    const response = await api.get('/grafana/cash-flow-analysis', { params });
+    
+    console.log('Cash Flow Analysis Response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('getCashFlowAnalysis API error:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+}
   // Geçmiş veriler
   static async getHistoricalData(parametreler: {
     kaynakKurulus: string;

@@ -56,7 +56,27 @@ export interface AnalysisData {
   farkYuzdesi: number;
   faizOrani: number;
 }
-
+export interface CashFlowAnalysisData {
+  timestamp: number;
+  period: string;
+  total_anapara: number;
+  total_basit_faiz: number;
+  total_faiz_kazanci: number;
+  avg_basit_faiz: number; 
+  total_model_faiz: number;
+  total_model_faiz_kazanci: number;
+  avg_model_nema_orani: number;
+  total_tlref_faiz: number;
+  total_tlref_kazanci: number;
+  avg_tlref_faiz: number;
+  basit_faiz_yield_percentage: number; 
+  model_faiz_yield_percentage: number; 
+  tlref_faiz_yield_percentage: number; 
+  basit_vs_model_performance: number;
+  basit_vs_tlref_performance: number;
+  record_count: number;
+  period_type: string;
+}
 export interface HistoricalData {
   tarih: string;
   toplamFaizTutari: number;
@@ -78,6 +98,12 @@ export const DASHBOARD_TYPES: DashboardConfig[] = [
     name: 'Nakit Akış Analizi',
     description: 'Faiz oranı analizi ve karşılaştırma',
     icon: '💰'
+  },
+  {
+    id: 'cash-flow-analysis', 
+    name: 'Cash Flow Analizi',
+    description: 'Basit, Model ve TLREF faiz karşılaştırması',
+    icon: '💹'
   },
   {
     id: 'historical',

@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import TrendChart from '../Charts/TrendChart';
 import AnalysisChart from '../Charts/AnalysisChart';
 import NakitAkisApi from '../../services/nakitAkisApi';
+import CashFlowAnalysisChart from '../Charts/CashFlowAnalysisChart'
 import { TrendData } from '../../types/nakitAkis';
+
 
 interface DashboardContainerProps {
   dashboardType: string;
@@ -22,7 +24,7 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-
+  const [currentPeriod, setCurrentPeriod] = useState<string>('month');
   // Data yükleme
   useEffect(() => {
     if (!kaynakKurulus) return;
@@ -44,7 +46,12 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
           case 'analysis':
             setData({ ready: true });
             break;
-            
+
+           case 'cash-flow-analysis': 
+            const cashFlowData = await NakitAkisApi.getCashFlowAnalysis(currentPeriod, 100);
+             setData(cashFlowData);
+              break;
+
           case 'historical':
             const historicalData = await NakitAkisApi.getHistoricalData({
               kaynakKurulus,
@@ -158,10 +165,28 @@ const DashboardContainer: React.FC<DashboardContainerProps> = ({
             kaynakKurulus={kaynakKurulus}
             fonNo={fonNo}
             ihracNo={ihracNo}
-            initialFaizOrani={faizOrani} // MASTER FAİZ ORANI
+            initialFaizOrani={faizOrani} 
           />
         );
-        
+       case 'cash-flow-analysis':
+  return (
+    <CashFlowAnalysisChart 
+      data={data} 
+      currentPeriod={currentPeriod} 
+      onPeriodChange={async (period) => {
+        setCurrentPeriod(period); 
+        setLoading(true);
+        try {
+          const newData = await NakitAkisApi.getCashFlowAnalysis(period, 100);
+          setData(newData);
+        } catch (error) {
+          console.error('Period change error:', error);
+        } finally {
+          setLoading(false);
+        }
+      }} 
+    />
+  );
       case 'historical':
         return (
           <div style={{ 

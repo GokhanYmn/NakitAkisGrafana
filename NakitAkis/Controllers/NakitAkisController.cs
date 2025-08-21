@@ -19,6 +19,9 @@ namespace NakitAkis.Controller
                 _logger = logger;
             }
 
+            
+
+
             [HttpGet("analiz")]
             public async Task<IActionResult> GetAnaliz(
                 [FromQuery] decimal faizOrani = 0.45m,
@@ -96,6 +99,7 @@ namespace NakitAkis.Controller
                     return BadRequest(new { error = ex.Message });
                 }
             }
+
 
             [HttpPost("test-connection")]
             public async Task<IActionResult> TestConnection()

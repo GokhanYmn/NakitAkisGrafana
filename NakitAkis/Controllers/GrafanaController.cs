@@ -48,6 +48,175 @@ namespace NakitAkis.Controllers
             }
         }
 
+        [HttpGet("cash-flow-analysis")]
+        [HttpPost("cash-flow-analysis")]
+        public async Task<IActionResult> GetCashFlowAnalysis([FromQuery] string period = "month",
+                                                    [FromQuery] int limit = 100)
+        {
+            try
+            {
+                _logger.LogInformation("=== CASH FLOW ANALYSIS REQUEST ===");
+                _logger.LogInformation("Period: {period}, Limit: {limit}", period, limit);
+
+                var connectionString = _configuration.GetConnectionString("DefaultConnection");
+                using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Period'a göre gruplamayı belirle
+                string dateTrunc = period switch
+                {
+                    "day" => "day",      // GÜNLÜK EKLENDİ
+                    "week" => "week",
+                    "month" => "month",
+                    "quarter" => "quarter",
+                    "year" => "year",
+                    _ => "month"
+                };
+
+                var sql = $@"
+        WITH cash_flow_data AS (
+            SELECT 
+                DATE_TRUNC('{dateTrunc}', tarih) as period_date,
+                SUM(COALESCE(anapara, 0))::float8 as total_anapara,
+                SUM(COALESCE(basit_faiz, 0))::float8 as total_basit_faiz,
+                SUM(COALESCE(faiz_kznc, 0))::float8 as total_faiz_kazanci,
+                SUM(COALESCE(model_nema_orani, 0) * COALESCE(anapara, 0) / 100.0)::float8 as total_model_faiz,
+                SUM(COALESCE(model_faiz_kznc, 0))::float8 as total_model_faiz_kazanci,
+                SUM(COALESCE(tlref_faiz, 0) * COALESCE(anapara, 0))::float8 as total_tlref_faiz,
+                SUM(COALESCE(tlref_faiz_kazanci, 0))::float8 as total_tlref_kazanci,
+                COUNT(*) as record_count,
+                AVG(COALESCE(model_nema_orani, 0))::float8 as avg_model_nema_orani,
+                AVG(COALESCE(tlref_faiz, 0))::float8 as avg_tlref_faiz,
+                AVG(COALESCE(basit_faiz, 0))::float8 as avg_basit_faiz -- BASİT FAİZ ORTALAMASI EKLENDİ
+            FROM cash_flow_analysis 
+            WHERE tarih IS NOT NULL 
+              AND anapara > 0
+            GROUP BY DATE_TRUNC('{dateTrunc}', tarih)
+        )
+        SELECT 
+            period_date,
+            total_anapara,
+            total_basit_faiz,
+            total_faiz_kazanci,
+            total_model_faiz,
+            total_model_faiz_kazanci,
+            total_tlref_faiz,
+            total_tlref_kazanci,
+            record_count,
+            avg_model_nema_orani,
+            avg_tlref_faiz,
+            avg_basit_faiz, -- BASİT FAİZ ORTALAMASI EKLENDİ
+            -- ANAPARA İLE FAİZ KAZANÇLARI (YENİ)
+            CASE 
+                WHEN total_anapara > 0 THEN (total_faiz_kazanci / total_anapara * 100)::float8
+                ELSE 0.0 
+            END as basit_faiz_yield_percentage,
+            CASE 
+                WHEN total_anapara > 0 THEN (total_model_faiz_kazanci / total_anapara * 100)::float8
+                ELSE 0.0 
+            END as model_faiz_yield_percentage,
+            CASE 
+                WHEN total_anapara > 0 THEN (total_tlref_kazanci / total_anapara * 100)::float8
+                ELSE 0.0 
+            END as tlref_faiz_yield_percentage,
+            -- Performans oranları
+            CASE 
+                WHEN total_model_faiz_kazanci > 0 THEN 
+                    ((total_faiz_kazanci - total_model_faiz_kazanci) / total_model_faiz_kazanci * 100)::float8
+                ELSE 0.0 
+            END as basit_vs_model_performance,
+            CASE 
+                WHEN total_tlref_kazanci > 0 THEN 
+                    ((total_faiz_kazanci - total_tlref_kazanci) / total_tlref_kazanci * 100)::float8
+                ELSE 0.0 
+            END as basit_vs_tlref_performance
+        FROM cash_flow_data
+        WHERE period_date IS NOT NULL
+        ORDER BY period_date ASC
+        LIMIT @Limit";
+
+                var result = await connection.QueryAsync<dynamic>(sql, new { Limit = limit });
+
+                if (!result.Any())
+                {
+                    _logger.LogWarning("No cash flow analysis data found");
+                    return Ok(new[] { new {
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                mesaj = "Cash flow analiz verisi bulunamadı"
+            }});
+                }
+
+                var response = result.Select(r => new
+                {
+                    timestamp = ((DateTimeOffset)((DateTime)r.period_date)).ToUnixTimeMilliseconds(),
+                    period = ((DateTime)r.period_date).ToString("yyyy-MM-dd"),
+
+                    // Ana Para
+                    total_anapara = SafeConvertToDouble(r.total_anapara),
+
+                    // Basit Faiz
+                    total_basit_faiz = SafeConvertToDouble(r.total_basit_faiz),
+                    total_faiz_kazanci = SafeConvertToDouble(r.total_faiz_kazanci),
+                    avg_basit_faiz = SafeConvertToDouble(r.avg_basit_faiz), // YENİ
+
+                    // Model Faiz
+                    total_model_faiz = SafeConvertToDouble(r.total_model_faiz),
+                    total_model_faiz_kazanci = SafeConvertToDouble(r.total_model_faiz_kazanci),
+                    avg_model_nema_orani = SafeConvertToDouble(r.avg_model_nema_orani),
+
+                    // TLREF Faiz
+                    total_tlref_faiz = SafeConvertToDouble(r.total_tlref_faiz),
+                    total_tlref_kazanci = SafeConvertToDouble(r.total_tlref_kazanci),
+                    avg_tlref_faiz = SafeConvertToDouble(r.avg_tlref_faiz),
+
+                    // ANAPARA - FAİZ VERİMLİLİK ORANLARI (YENİ)
+                    basit_faiz_yield_percentage = SafeConvertToDouble(r.basit_faiz_yield_percentage),
+                    model_faiz_yield_percentage = SafeConvertToDouble(r.model_faiz_yield_percentage),
+                    tlref_faiz_yield_percentage = SafeConvertToDouble(r.tlref_faiz_yield_percentage),
+
+                    // Performans
+                    basit_vs_model_performance = SafeConvertToDouble(r.basit_vs_model_performance),
+                    basit_vs_tlref_performance = SafeConvertToDouble(r.basit_vs_tlref_performance),
+
+                    // Meta
+                    record_count = Convert.ToInt32(r.record_count ?? 0),
+                    period_type = period
+                }).ToArray();
+
+                _logger.LogInformation("Cash flow analysis returning {count} {period} records",
+                    response.Length, period);
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Cash flow analysis query failed: {error}", ex.Message);
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        // Helper method ekle
+        private double SafeConvertToDouble(object value)
+        {
+            if (value == null || value == DBNull.Value)
+                return 0.0;
+
+            try
+            {
+                return Convert.ToDouble(value);
+            }
+            catch (OverflowException)
+            {
+                _logger.LogWarning("Overflow detected, returning max safe value");
+                return double.MaxValue / 1000; // Güvenli değer
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Value conversion failed, returning 0");
+                return 0.0;
+            }
+        }
+
         // Grafana Query Endpoint - Ana veri kaynağı
         [HttpGet("query")]
         [HttpPost("query")]
