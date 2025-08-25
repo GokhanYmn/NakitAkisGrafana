@@ -36,7 +36,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
   onPeriodChange 
 }) => {
   const { theme } = useTheme();
-  const [selectedMetric, setSelectedMetric] = useState<'anapara' | 'kazanc' | 'verimlilik' | 'performance'>('anapara');
+  const [selectedMetric, setSelectedMetric] = useState<'anapara' | 'kazanc' | 'verimlilik' | 'performance'>('kazanc');
   
   // PARENT'TAN GELEN PERIOD'U KULLAN
   const [selectedPeriod, setSelectedPeriod] = useState<string>(currentPeriod);
@@ -82,7 +82,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     }
   };
 
-  // TARİH FORMATLAMA FİX - currentPeriod KULLAN
+  // TARİH FORMATLAMA - currentPeriod KULLAN
   const labels = data.map((item: CashFlowAnalysisData) => {
     const date = new Date(item.timestamp);
     

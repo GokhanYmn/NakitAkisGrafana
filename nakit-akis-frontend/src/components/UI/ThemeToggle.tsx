@@ -2,39 +2,40 @@ import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const ThemeToggle: React.FC = () => {
-  const { isDark, toggleTheme, theme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <button
       onClick={toggleTheme}
       style={{
-        padding: '8px 16px',
-        backgroundColor: theme.colors.surface,
-        color: theme.colors.text,
-        border: `1px solid ${theme.colors.border}`,
-        borderRadius: '6px',
+        background: 'rgba(255,255,255,0.15)',
+        color: 'white',
+        border: 'none',
+        borderRadius: '20px',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
         fontSize: '14px',
         fontWeight: '500',
-        transition: 'all 0.3s ease'
+        transition: 'all 0.3s ease',
+        padding: '8px 12px',
+        backdropFilter: 'blur(10px)'
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.backgroundColor = theme.colors.primary;
-        e.currentTarget.style.color = '#ffffff';
+        e.currentTarget.style.background = 'rgba(255,255,255,0.25)';
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = theme.colors.surface;
-        e.currentTarget.style.color = theme.colors.text;
+        e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
       }}
     >
       <span style={{ fontSize: '16px' }}>
         {isDark ? '☀️' : '🌙'}
       </span>
-      <span>
-        {isDark ? 'Light Mode' : 'Dark Mode'}
+      <span style={{ 
+        display: window.innerWidth < 768 ? 'none' : 'block' 
+      }}>
+        {isDark ? 'Light' : 'Dark'}
       </span>
     </button>
   );

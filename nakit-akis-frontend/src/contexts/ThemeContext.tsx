@@ -1,3 +1,4 @@
+// src/contexts/ThemeContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface ThemeContextType {
@@ -88,11 +89,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  // Body'ye tema class'ı ekle
+  // Body'ye tema class'ı ekle ve CSS variables set et
   useEffect(() => {
     document.body.className = isDark ? 'dark-theme' : 'light-theme';
     document.body.style.backgroundColor = theme.colors.background;
     document.body.style.color = theme.colors.text;
+    
+    // CSS Variables set et
+    const root = document.documentElement;
+    root.style.setProperty('--primary-color', theme.colors.primary);
+    root.style.setProperty('--secondary-color', theme.colors.secondary);
+    root.style.setProperty('--background-color', theme.colors.background);
+    root.style.setProperty('--surface-color', theme.colors.surface);
+    root.style.setProperty('--text-color', theme.colors.text);
+    root.style.setProperty('--text-secondary-color', theme.colors.textSecondary);
+    root.style.setProperty('--border-color', theme.colors.border);
+    root.style.setProperty('--success-color', theme.colors.success);
+    root.style.setProperty('--warning-color', theme.colors.warning);
+    root.style.setProperty('--error-color', theme.colors.error);
   }, [isDark, theme]);
 
   return (

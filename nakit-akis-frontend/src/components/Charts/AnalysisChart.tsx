@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import NakitAkisApi from '../../services/nakitAkisApi';
-import { useTheme } from '../../contexts/ThemeContext'; // TEMA CONTEXT'İ EKLE
+import { useTheme } from '../../contexts/ThemeContext'; 
 
 interface AnalysisChartProps {
   kaynakKurulus: string;
@@ -15,7 +15,7 @@ const AnalysisChart: React.FC<AnalysisChartProps> = ({
   ihracNo, 
   initialFaizOrani 
 }) => {
-  const { theme } = useTheme(); // TEMA HOOK'U EKLE
+  const { theme } = useTheme(); 
   
   const [faizOrani, setFaizOrani] = useState<number>(initialFaizOrani);
   const [analysisData, setAnalysisData] = useState<any>(null);
