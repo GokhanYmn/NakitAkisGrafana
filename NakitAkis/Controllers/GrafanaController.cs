@@ -48,9 +48,6 @@ namespace NakitAkis.Controllers
             }
         }
 
-        // NakitAkis/Controllers/GrafanaController.cs
-        // GetCashFlowAnalysis method'unu tamamen değiştir
-
         [HttpGet("cash-flow-analysis")]
         [HttpPost("cash-flow-analysis")]
         public async Task<IActionResult> GetCashFlowAnalysis([FromQuery] string period = "month",
@@ -76,65 +73,37 @@ namespace NakitAkis.Controllers
                     _ => "month"
                 };
 
-                // GELİŞMİŞ QUERY - BOŞLUK ve NEGATİF DEĞER KORUMALARI
+                // TEK QUERY - SADECE DATE_TRUNC İLE GRUPLAMA
                 var sql = $@"
-        WITH period_data AS (
-            SELECT 
-                DATE_TRUNC('{dateTrunc}', tarih) as period_date,
-                -- GÜVENLI TOPLAMA - NULL ve NEGATİF KONTROL
-                SUM(CASE WHEN COALESCE(anapara, 0) > 0 THEN COALESCE(anapara, 0) ELSE 0 END)::float8 as total_anapara,
-                SUM(CASE WHEN COALESCE(basit_faiz, 0) >= 0 THEN COALESCE(basit_faiz, 0) ELSE 0 END)::float8 as total_basit_faiz,
-                SUM(CASE WHEN COALESCE(faiz_kznc, 0) >= 0 THEN COALESCE(faiz_kznc, 0) ELSE 0 END)::float8 as total_faiz_kazanci,
-                SUM(CASE WHEN COALESCE(model_faiz_kznc, 0) >= 0 THEN COALESCE(model_faiz_kznc, 0) ELSE 0 END)::float8 as total_model_faiz_kazanci,
-                SUM(CASE WHEN COALESCE(tlref_faiz_kazanci, 0) >= 0 THEN COALESCE(tlref_faiz_kazanci, 0) ELSE 0 END)::float8 as total_tlref_kazanci,
-                COUNT(*) as record_count,
-                -- ORTALAMA HESAPLAMALARI - NULL SAFE
-                AVG(CASE WHEN COALESCE(model_nema_orani, 0) BETWEEN 0 AND 1 THEN COALESCE(model_nema_orani, 0) ELSE 0 END)::float8 as avg_model_nema_orani,
-                AVG(CASE WHEN COALESCE(tlref_faiz, 0) BETWEEN 0 AND 1 THEN COALESCE(tlref_faiz, 0) ELSE 0 END)::float8 as avg_tlref_faiz,
-                AVG(CASE WHEN COALESCE(basit_faiz, 0) BETWEEN 0 AND 1 THEN COALESCE(basit_faiz, 0) ELSE 0 END)::float8 as avg_basit_faiz
-            FROM cash_flow_analysis 
-            WHERE tarih IS NOT NULL 
-              AND tarih >= CURRENT_DATE - INTERVAL '2 years'  -- Son 2 yıl
-              AND COALESCE(anapara, 0) > 0  -- Geçerli anapara
-            GROUP BY DATE_TRUNC('{dateTrunc}', tarih)
-            HAVING COUNT(*) > 0  -- En az 1 kayıt olmalı
-        ),
-        filled_periods AS (
-            SELECT 
-                period_date,
-                -- SIFIR DEĞER KORUNALARI - Grafik kırılmasını engeller
-                GREATEST(total_anapara, 0) as total_anapara,
-                GREATEST(total_basit_faiz, 0) as total_basit_faiz, 
-                GREATEST(total_faiz_kazanci, 0) as total_faiz_kazanci,
-                GREATEST(total_model_faiz_kazanci, 0) as total_model_faiz_kazanci,
-                GREATEST(total_tlref_kazanci, 0) as total_tlref_kazanci,
-                record_count,
-                GREATEST(avg_model_nema_orani, 0) as avg_model_nema_orani,
-                GREATEST(avg_tlref_faiz, 0) as avg_tlref_faiz,
-                GREATEST(avg_basit_faiz, 0) as avg_basit_faiz,
-                0.0 as total_model_faiz,
-                0.0 as total_tlref_faiz
-            FROM period_data
-            WHERE total_anapara > 0  -- Boş dönemleri filtrele
-        )
-        SELECT * FROM filled_periods
-        ORDER BY period_date ASC  -- SIRALAMA ZORUNLU
+        SELECT 
+            DATE_TRUNC('{dateTrunc}', tarih) as period_date,
+            -- VERİLERİ OLDUĞU GİBİ AL, FAZLA TOPLAMA YAPMA
+            AVG(COALESCE(anapara, 0))::float8 as total_anapara,
+            AVG(COALESCE(basit_faiz, 0))::float8 as total_basit_faiz,
+            AVG(COALESCE(faiz_kznc, 0))::float8 as total_faiz_kazanci,
+            AVG(COALESCE(model_faiz_kznc, 0))::float8 as total_model_faiz_kazanci,
+            AVG(COALESCE(tlref_faiz_kazanci, 0))::float8 as total_tlref_kazanci,
+            COUNT(*) as record_count,
+            AVG(COALESCE(model_nema_orani, 0))::float8 as avg_model_nema_orani,
+            AVG(COALESCE(tlref_faiz, 0))::float8 as avg_tlref_faiz,
+            AVG(COALESCE(basit_faiz, 0))::float8 as avg_basit_faiz,
+            0.0 as total_model_faiz,
+            0.0 as total_tlref_faiz
+        FROM cash_flow_analysis 
+        WHERE tarih IS NOT NULL 
+          AND anapara > 0
+        GROUP BY DATE_TRUNC('{dateTrunc}', tarih)
+        ORDER BY DATE_TRUNC('{dateTrunc}', tarih) ASC
         LIMIT @Limit";
 
                 var result = await connection.QueryAsync<dynamic>(sql, new { Limit = limit });
 
                 if (!result.Any())
                 {
-                    _logger.LogWarning("No cash flow analysis data found for period: {period}", period);
+                    _logger.LogWarning("No cash flow analysis data found");
                     return Ok(new[] { new {
                 timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                period = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-                total_anapara = 0.0,
-                total_faiz_kazanci = 0.0,
-                total_model_faiz_kazanci = 0.0,
-                total_tlref_kazanci = 0.0,
-                record_count = 0,
-                mesaj = "Veri bulunamadı - dönem: " + period
+                mesaj = "Cash flow analiz verisi bulunamadı"
             }});
                 }
 
@@ -143,56 +112,43 @@ namespace NakitAkis.Controllers
                     timestamp = ((DateTimeOffset)((DateTime)r.period_date)).ToUnixTimeMilliseconds(),
                     period = ((DateTime)r.period_date).ToString("yyyy-MM-dd"),
 
-                    // GÜVENLI DÖNÜŞTÜRME - SafeConvertToDouble ekstra kontrol
-                    total_anapara = Math.Max(0, SafeConvertToDouble(r.total_anapara)),
-                    total_basit_faiz = Math.Max(0, SafeConvertToDouble(r.total_basit_faiz)),
-                    total_faiz_kazanci = Math.Max(0, SafeConvertToDouble(r.total_faiz_kazanci)),
-                    total_model_faiz_kazanci = Math.Max(0, SafeConvertToDouble(r.total_model_faiz_kazanci)),
-                    total_tlref_kazanci = Math.Max(0, SafeConvertToDouble(r.total_tlref_kazanci)),
+                    // SADECE CONVERT ET, HESAPLAMA YAPMA
+                    total_anapara = SafeConvertToDouble(r.total_anapara),
+                    total_basit_faiz = SafeConvertToDouble(r.total_basit_faiz),
+                    total_faiz_kazanci = SafeConvertToDouble(r.total_faiz_kazanci),
+                    avg_basit_faiz = SafeConvertToDouble(r.avg_basit_faiz),
+                    total_model_faiz = SafeConvertToDouble(r.total_model_faiz),
+                    total_model_faiz_kazanci = SafeConvertToDouble(r.total_model_faiz_kazanci),
+                    avg_model_nema_orani = SafeConvertToDouble(r.avg_model_nema_orani),
+                    total_tlref_faiz = SafeConvertToDouble(r.total_tlref_faiz),
+                    total_tlref_kazanci = SafeConvertToDouble(r.total_tlref_kazanci),
+                    avg_tlref_faiz = SafeConvertToDouble(r.avg_tlref_faiz),
 
-                    // ORTALAMA ORANLAR - 0 ile 100 arasında sınırla
-                    avg_basit_faiz = Math.Min(100, Math.Max(0, SafeConvertToDouble(r.avg_basit_faiz))),
-                    avg_model_nema_orani = Math.Min(100, Math.Max(0, SafeConvertToDouble(r.avg_model_nema_orani))),
-                    avg_tlref_faiz = Math.Min(100, Math.Max(0, SafeConvertToDouble(r.avg_tlref_faiz))),
-
-                    // SABIT DEĞERLER
-                    total_model_faiz = 0.0,
-                    total_tlref_faiz = 0.0,
-
-                    // VERİMLİLİK HESAPLAMALARI - SIFIR BÖLME KORUNMASI
+                    // VERİMLİLİK HESAPLAMALARI - FRONTEND'DE YAPILACAK
                     basit_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
-                        ? Math.Min(100, Math.Max(0, (SafeConvertToDouble(r.total_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)))
+                        ? (SafeConvertToDouble(r.total_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
                         : 0.0,
                     model_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
-                        ? Math.Min(100, Math.Max(0, (SafeConvertToDouble(r.total_model_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)))
+                        ? (SafeConvertToDouble(r.total_model_faiz_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
                         : 0.0,
                     tlref_faiz_yield_percentage = SafeConvertToDouble(r.total_anapara) > 0
-                        ? Math.Min(100, Math.Max(0, (SafeConvertToDouble(r.total_tlref_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)))
+                        ? (SafeConvertToDouble(r.total_tlref_kazanci) / SafeConvertToDouble(r.total_anapara) * 100)
                         : 0.0,
 
-                    // PERFORMANS KARŞILAŞTIRMALARI - SIFIR BÖLME VE AŞIRI DEĞER KORUNMASI
+                    // PERFORMANS HESAPLAMALARI
                     basit_vs_model_performance = SafeConvertToDouble(r.total_model_faiz_kazanci) > 0
-                        ? Math.Min(500, Math.Max(-500, ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_model_faiz_kazanci)) / SafeConvertToDouble(r.total_model_faiz_kazanci) * 100)))
+                        ? ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_model_faiz_kazanci)) / SafeConvertToDouble(r.total_model_faiz_kazanci) * 100)
                         : 0.0,
                     basit_vs_tlref_performance = SafeConvertToDouble(r.total_tlref_kazanci) > 0
-                        ? Math.Min(500, Math.Max(-500, ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_tlref_kazanci)) / SafeConvertToDouble(r.total_tlref_kazanci) * 100)))
+                        ? ((SafeConvertToDouble(r.total_faiz_kazanci) - SafeConvertToDouble(r.total_tlref_kazanci)) / SafeConvertToDouble(r.total_tlref_kazanci) * 100)
                         : 0.0,
 
-                    record_count = Math.Max(0, Convert.ToInt32(r.record_count ?? 0)),
+                    record_count = Convert.ToInt32(r.record_count ?? 0),
                     period_type = period
                 }).ToArray();
 
-                _logger.LogInformation("Cash flow analysis returning {count} {period} records - Range: {start} to {end}",
-                    response.Length, period,
-                    response.FirstOrDefault()?.period ?? "N/A",
-                    response.LastOrDefault()?.period ?? "N/A");
-
-                // VERİ KALİTESİ KONTROLÜ - Log olarak
-                //foreach (var item in response.Take(3))
-                //{
-                //    _logger.LogInformation("Sample data - Period: {period}, Faiz: {faiz}, Anapara: {anapara}, Records: {records}",
-                //        item.period, item.total_faiz_kazanci, item.total_anapara, item.record_count);
-                //}
+                _logger.LogInformation("Cash flow analysis returning {count} {period} records",
+                    response.Length, period);
 
                 return Ok(response);
             }
@@ -202,6 +158,8 @@ namespace NakitAkis.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        // Helper method ekle
         private double SafeConvertToDouble(object value)
         {
             if (value == null || value == DBNull.Value)
@@ -209,56 +167,19 @@ namespace NakitAkis.Controllers
 
             try
             {
-                var doubleValue = Convert.ToDouble(value);
-
-                // NaN ve Infinity kontrolü
-                if (double.IsNaN(doubleValue) || double.IsInfinity(doubleValue))
-                {
-                    _logger.LogWarning("Invalid double value detected: {value}, returning 0", value);
-                    return 0.0;
-                }
-
-                // Çok büyük değer kontrolü - Chart.js limitleri
-                if (Math.Abs(doubleValue) > 1e15)
-                {
-                    _logger.LogWarning("Extremely large value detected: {value}, capping to safe range", doubleValue);
-                    return doubleValue > 0 ? 1e12 : -1e12;
-                }
-
-                return doubleValue;
+                return Convert.ToDouble(value);
             }
             catch (OverflowException)
             {
-                _logger.LogWarning("Overflow detected for value: {value}, returning safe fallback", value);
-                return 0.0;
+                _logger.LogWarning("Overflow detected, returning max safe value");
+                return double.MaxValue / 1000; // Güvenli değer
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Value conversion failed for: {value}, returning 0", value);
+                _logger.LogWarning(ex, "Value conversion failed, returning 0");
                 return 0.0;
             }
         }
-        // Helper method ekle
-      //  private double SafeConvertToDouble(object value)
-        //{
-        //    if (value == null || value == DBNull.Value)
-        //        return 0.0;
-
-        //    try
-        //    {
-        //        return Convert.ToDouble(value);
-        //    }
-        //    catch (OverflowException)
-        //    {
-        //        _logger.LogWarning("Overflow detected, returning max safe value");
-        //        return double.MaxValue / 1000; // Güvenli değer
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogWarning(ex, "Value conversion failed, returning 0");
-        //        return 0.0;
-        //    }
-        //}
 
        
         [HttpGet("query")]

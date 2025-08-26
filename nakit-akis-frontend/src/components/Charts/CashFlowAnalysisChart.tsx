@@ -36,8 +36,98 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
   onPeriodChange 
 }) => {
   const { theme } = useTheme();
-  const [selectedMetric, setSelectedMetric] = useState<'anapara' | 'kazanc' | 'verimlilik' | 'performance'>('kazanc');
+  const [selectedMetric, setSelectedMetric] = useState<'anapara' | 'kazanc' | 'verimlilik' | 'performance'>('kazanc'); // DEFAULT DEĞİŞTİRİLDİ
   
+  // VERİ TEMİZLEME FONKSİYONU - YENİ EKLENEN
+  const cleanData = (rawData: CashFlowAnalysisData[]): CashFlowAnalysisData[] => {
+    if (!rawData || rawData.length === 0) return [];
+
+    console.log('=== RAW DATA BEFORE CLEANING ===');
+    rawData.forEach((item, index) => {
+      if (index < 3) {
+        console.log(`Item ${index}:`, {
+          period: item.period || new Date(item.timestamp).toISOString(),
+          total_faiz_kazanci: item.total_faiz_kazanci,
+          total_anapara: item.total_anapara,
+          isValid: !isNaN(item.total_faiz_kazanci) && item.total_faiz_kazanci >= 0
+        });
+      }
+    });
+
+    const cleanedData = rawData
+      .map((item) => ({
+        ...item,
+        // NaN ve negatif değerleri temizle
+        total_anapara: Math.max(0, isNaN(item.total_anapara) ? 0 : item.total_anapara),
+        total_faiz_kazanci: Math.max(0, isNaN(item.total_faiz_kazanci) ? 0 : item.total_faiz_kazanci),
+        total_model_faiz_kazanci: Math.max(0, isNaN(item.total_model_faiz_kazanci) ? 0 : item.total_model_faiz_kazanci),
+        total_tlref_kazanci: Math.max(0, isNaN(item.total_tlref_kazanci) ? 0 : item.total_tlref_kazanci),
+        
+        // Performans değerlerini sınırla (grafiği kıran aşırı değerleri önler)
+        basit_vs_model_performance: Math.max(-500, Math.min(500, isNaN(item.basit_vs_model_performance) ? 0 : item.basit_vs_model_performance)),
+        basit_vs_tlref_performance: Math.max(-500, Math.min(500, isNaN(item.basit_vs_tlref_performance) ? 0 : item.basit_vs_tlref_performance)),
+        
+        // Verimlilik yüzdelerini sınırla
+        basit_faiz_yield_percentage: Math.max(0, Math.min(100, isNaN(item.basit_faiz_yield_percentage) ? 0 : item.basit_faiz_yield_percentage)),
+        model_faiz_yield_percentage: Math.max(0, Math.min(100, isNaN(item.model_faiz_yield_percentage) ? 0 : item.model_faiz_yield_percentage)),
+        tlref_faiz_yield_percentage: Math.max(0, Math.min(100, isNaN(item.tlref_faiz_yield_percentage) ? 0 : item.tlref_faiz_yield_percentage)),
+        
+        // Record count güvenlik
+        record_count: Math.max(0, item.record_count || 0)
+      }))
+      .filter((item) => {
+        // Geçersiz kayıtları filtrele
+        const isValidRecord = (
+          item.total_anapara > 0 || 
+          item.total_faiz_kazanci > 0 || 
+          item.record_count > 0
+        );
+        
+        if (!isValidRecord) {
+          console.log('Filtered out invalid record:', item.period || new Date(item.timestamp).toISOString());
+        }
+        
+        return isValidRecord;
+      })
+      .sort((a, b) => a.timestamp - b.timestamp); // Tarih sıralaması zorla
+
+    console.log('=== CLEANED DATA ===');
+    console.log(`Original count: ${rawData.length}, Cleaned count: ${cleanedData.length}`);
+    cleanedData.slice(0, 3).forEach((item, index) => {
+      console.log(`Cleaned Item ${index}:`, {
+        period: item.period || new Date(item.timestamp).toISOString(),
+        total_faiz_kazanci: item.total_faiz_kazanci,
+        total_anapara: item.total_anapara
+      });
+    });
+
+    return cleanedData;
+  };
+
+  // Temizlenmiş veriyi kullan
+  const processedData = cleanData(data);
+
+  // GÜNLÜK DATA'YI SAKLA
+  const [dailyData, setDailyData] = useState<CashFlowAnalysisData[] | null>(null);
+
+  useEffect(() => {
+    const loadDailyData = async () => {
+      if (!dailyData) { // Sadece bir kere yükle
+        try {
+          console.log('Loading daily data for summary cards...');
+          const response = await fetch('http://localhost:7289/api/grafana/cash-flow-analysis?period=day&limit=50');
+          const dailyResponse = await response.json();
+          console.log('Daily data loaded:', dailyResponse.slice(0, 3));
+          setDailyData(dailyResponse);
+        } catch (error) {
+          console.error('Failed to load daily data:', error);
+        }
+      }
+    };
+
+    loadDailyData();
+  }, []); 
+
   // PARENT'TAN GELEN PERIOD'U KULLAN
   const [selectedPeriod, setSelectedPeriod] = useState<string>(currentPeriod);
   
@@ -46,18 +136,19 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     setSelectedPeriod(currentPeriod);
   }, [currentPeriod]);
   
-  // DEBUG: Gelen veriyi kontrol et
+  // DEBUG: Gelen veriyi kontrol et - PROCESSED DATA KULLAN
   useEffect(() => {
-    if (data && data.length > 0) {
-      console.log('=== CASH FLOW DATA DEBUG ===');
+    if (processedData && processedData.length > 0) {
+      console.log('=== PROCESSED CASH FLOW DATA DEBUG ===');
       console.log('Current period:', currentPeriod);
-      console.log('Data length:', data.length);
-      console.log('First item:', data[0]);
+      console.log('Processed data length:', processedData.length);
+      console.log('First processed item:', processedData[0]);
+      console.log('Last processed item:', processedData[processedData.length - 1]);
       console.log('========================');
     }
-  }, [data, currentPeriod]);
+  }, [processedData, currentPeriod]);
   
-  if (!data || data.length === 0) {
+  if (!processedData || processedData.length === 0) {
     return (
       <div style={{ 
         padding: '40px', 
@@ -68,7 +159,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       }}>
         <h3 style={{ color: theme.colors.text }}>💹 Cash Flow Analiz Verisi Yok</h3>
         <p style={{ color: theme.colors.textSecondary }}>
-          cash_flow_analysis tablosunda gösterilecek veri bulunamadı.
+          {currentPeriod} periyodu için gösterilecek veri bulunamadı veya veriler geçersiz.
         </p>
       </div>
     );
@@ -82,8 +173,8 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     }
   };
 
-  // TARİH FORMATLAMA - currentPeriod KULLAN
-  const labels = data.map((item: CashFlowAnalysisData) => {
+  // TARİH FORMATLAMA FİX - currentPeriod KULLAN
+  const labels = processedData.map((item: CashFlowAnalysisData) => {
     const date = new Date(item.timestamp);
     
     switch (currentPeriod) {
@@ -113,7 +204,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     datasets: [
       {
         label: '💰 Toplam Anapara (₺)',
-        data: data.map((item: CashFlowAnalysisData) => item.total_anapara),
+        data: processedData.map((item: CashFlowAnalysisData) => item.total_anapara),
         borderColor: '#6c757d',
         backgroundColor: 'rgba(108, 117, 125, 0.1)',
         borderWidth: 4,
@@ -134,7 +225,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     datasets: [
       {
         label: '💰 Basit Faiz Kazancı (₺)',
-        data: data.map((item: CashFlowAnalysisData) => item.total_faiz_kazanci),
+        data: processedData.map((item: CashFlowAnalysisData) => item.total_faiz_kazanci),
         borderColor: '#28a745',
         backgroundColor: 'rgba(40, 167, 69, 0.1)',
         borderWidth: 3,
@@ -148,7 +239,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       },
       {
         label: '🎯 Model Faiz Kazancı (₺)',
-        data: data.map((item: CashFlowAnalysisData) => item.total_model_faiz_kazanci),
+        data: processedData.map((item: CashFlowAnalysisData) => item.total_model_faiz_kazanci),
         borderColor: '#007bff',
         backgroundColor: 'rgba(0, 123, 255, 0.1)',
         borderWidth: 3,
@@ -162,7 +253,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       },
       {
         label: '📊 TLREF Faiz Kazancı (₺)',
-        data: data.map((item: CashFlowAnalysisData) => item.total_tlref_kazanci),
+        data: processedData.map((item: CashFlowAnalysisData) => item.total_tlref_kazanci),
         borderColor: '#fa0505ff',
         backgroundColor: 'rgba(111, 66, 193, 0.1)',
         borderWidth: 3,
@@ -183,7 +274,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     datasets: [
       {
         label: '💰 Basit Faiz Verimlilik (%)',
-        data: data.map((item: CashFlowAnalysisData) => item.basit_faiz_yield_percentage || 0),
+        data: processedData.map((item: CashFlowAnalysisData) => item.basit_faiz_yield_percentage || 0),
         borderColor: '#28a745',
         backgroundColor: 'rgba(40, 167, 69, 0.1)',
         borderWidth: 3,
@@ -197,7 +288,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       },
       {
         label: '🎯 Model Faiz Verimlilik (%)',
-        data: data.map((item: CashFlowAnalysisData) => item.model_faiz_yield_percentage || 0),
+        data: processedData.map((item: CashFlowAnalysisData) => item.model_faiz_yield_percentage || 0),
         borderColor: '#007bff',
         backgroundColor: 'rgba(0, 123, 255, 0.1)',
         borderWidth: 3,
@@ -211,7 +302,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       },
       {
         label: '📊 TLREF Faiz Verimlilik (%)',
-        data: data.map((item: CashFlowAnalysisData) => item.tlref_faiz_yield_percentage || 0),
+        data: processedData.map((item: CashFlowAnalysisData) => item.tlref_faiz_yield_percentage || 0),
         borderColor: '#6f42c1',
         backgroundColor: 'rgba(111, 66, 193, 0.1)',
         borderWidth: 3,
@@ -232,7 +323,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
     datasets: [
       {
         label: '📈 Basit vs Model Performans (%)',
-        data: data.map((item: CashFlowAnalysisData) => item.basit_vs_model_performance),
+        data: processedData.map((item: CashFlowAnalysisData) => item.basit_vs_model_performance),
         borderColor: '#fd7e14',
         backgroundColor: 'rgba(253, 126, 20, 0.1)',
         borderWidth: 3,
@@ -246,7 +337,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
       },
       {
         label: '📊 Basit vs TLREF Performans (%)',
-        data: data.map((item: CashFlowAnalysisData) => item.basit_vs_tlref_performance),
+        data: processedData.map((item: CashFlowAnalysisData) => item.basit_vs_tlref_performance),
         borderColor: '#dc3545',
         backgroundColor: 'rgba(220, 53, 69, 0.1)',
         borderWidth: 3,
@@ -320,7 +411,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           title: function(context: any) {
             try {
               const dataIndex = context[0].dataIndex;
-              const item = data[dataIndex];
+              const item = processedData[dataIndex];
               const recordCount = item?.record_count || 0;
               
               // TARİH FORMATINI PERIOD'A GÖRE AYARLA
@@ -361,7 +452,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           beforeBody: function(context: any) {
             try {
               const dataIndex = context[0].dataIndex;
-              const item = data[dataIndex];
+              const item = processedData[dataIndex];
               
               if (!item) return [];
               
@@ -411,7 +502,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           afterBody: function(context: any) {
             try {
               const dataIndex = context[0].dataIndex;
-              const item = data[dataIndex];
+              const item = processedData[dataIndex];
               
               if (!item) return [];
               
@@ -491,10 +582,12 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
   };
 
   // Özet istatistikler
-  const totalBasitKazanc = data.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_faiz_kazanci || 0), 0);
-  const totalModelKazanc = data.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_model_faiz_kazanci || 0), 0);
-  const totalTlrefKazanc = data.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_tlref_kazanci || 0), 0);
-  const avgModelPerformance = data.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.basit_vs_model_performance || 0), 0) / data.length;
+ const totalBasitKazanc = processedData.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_faiz_kazanci || 0), 0);
+ const totalModelKazanc = processedData.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_model_faiz_kazanci || 0), 0);
+ const totalTlrefKazanc = processedData.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.total_tlref_kazanci || 0), 0);
+  const avgModelPerformance = processedData.length > 0 
+    ? processedData.reduce((sum: number, item: CashFlowAnalysisData) => sum + (item.basit_vs_model_performance || 0), 0) / processedData.length
+    : 0;
 
   return (
     <div style={{ 
@@ -539,7 +632,7 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
         </div>
       </div>
 
-      {/* Metrik seçici */}
+      {/* Metrik seçici - FAİZ KAZANÇLARI İLK SIRADA */}
       <div style={{ 
         marginBottom: '20px',
         display: 'flex',
@@ -547,20 +640,6 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
         justifyContent: 'center',
         flexWrap: 'wrap'
       }}>
-         <button
-          onClick={() => setSelectedMetric('anapara')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: selectedMetric === 'anapara' ? theme.colors.warning : theme.colors.background,
-            color: selectedMetric === 'anapara' ? 'white' : theme.colors.text,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          💰 Anapara
-        </button>
         <button
           onClick={() => setSelectedMetric('kazanc')}
           style={{
@@ -574,6 +653,20 @@ const CashFlowAnalysisChart: React.FC<CashFlowAnalysisChartProps> = ({
           }}
         >
           💹 Faiz Kazançları
+        </button>
+        <button
+          onClick={() => setSelectedMetric('anapara')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: selectedMetric === 'anapara' ? theme.colors.warning : theme.colors.background,
+            color: selectedMetric === 'anapara' ? 'white' : theme.colors.text,
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          💰 Anapara
         </button>
        {/*} <button
           onClick={() => setSelectedMetric('verimlilik')}

@@ -8,7 +8,7 @@ const ThemeToggle: React.FC = () => {
     <button
       onClick={toggleTheme}
       style={{
-        background: 'rgba(255,255,255,0.15)',
+        background: 'rgba(0, 0, 0, 0.15)',
         color: 'white',
         border: 'none',
         borderRadius: '20px',
@@ -23,10 +23,10 @@ const ThemeToggle: React.FC = () => {
         backdropFilter: 'blur(10px)'
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.25)';
+        e.currentTarget.style.background = 'rgba(0, 0, 0, 0.25)';
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+        e.currentTarget.style.background = 'rgba(0, 0, 0, 0.15)';
       }}
     >
       <span style={{ fontSize: '16px' }}>
